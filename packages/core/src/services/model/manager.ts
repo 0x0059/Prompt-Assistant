@@ -2,7 +2,7 @@
  * @file manager.ts
  * @description 模型管理器实现，提供AI模型配置的存储、验证和管理功能
  * @module @prompt-assistant/core/services/model
- * @author Prompt Assistant Team
+ * @author Moyu.la
  */
 
 import { ModelConfig, IModelManager } from './types';

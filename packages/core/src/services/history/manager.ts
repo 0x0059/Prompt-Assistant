@@ -2,7 +2,7 @@
  * @file manager.ts
  * @description 历史记录管理器实现，提供提示词历史记录的存储、查询和链式管理功能
  * @module @prompt-assistant/core/services/history
- * @author Prompt Assistant Team
+ * @author Moyu.la
  */
 
 import { IHistoryManager, PromptRecord, PromptRecordChain } from './types';

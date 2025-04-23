@@ -2,7 +2,7 @@
  * @file errors.ts
  * @description 历史记录服务错误类定义
  * @module @prompt-assistant/core/services/history
- * @author Prompt Assistant Team
+ * @author Moyu.la
  */
 
 /**

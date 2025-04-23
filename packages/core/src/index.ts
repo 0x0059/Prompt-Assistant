@@ -2,7 +2,7 @@
  * @file index.ts
  * @description 核心模块导出文件，集中导出所有服务和实用工具
  * @module @prompt-assistant/core
- * @author Prompt Assistant Team
+ * @author Moyu.la
  */
 
 /**

@@ -2,7 +2,7 @@
  * @file usePromptAssistant.ts
  * @description 提示词助手核心组合式函数
  * @module @prompt-assistant/ui/composables
- * @author Prompt Assistant Team
+ * @author Moyu.la
  */
 
 import { ref, onMounted, watch } from 'vue'

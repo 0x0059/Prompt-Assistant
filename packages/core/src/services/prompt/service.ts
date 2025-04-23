@@ -2,7 +2,7 @@
  * @file service.ts
  * @description 提示词服务实现，提供提示词优化、迭代和测试等核心功能
  * @module @prompt-assistant/core/services/prompt
- * @author Prompt Assistant Team
+ * @author Moyu.la
  */
 
 import { IPromptService } from './types';
