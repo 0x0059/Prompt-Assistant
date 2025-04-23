@@ -1,0 +1,41 @@
+version: '3'
+services:
+  prompt_generator:
+    image: 0x0059/prompt_generator:latest
+    # Alternatively, you can build from source:
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
+    container_name: prompt_generator
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    environment:
+      # OpenAI API配置
+      - VITE_OPENAI_API_KEY=${VITE_OPENAI_API_KEY:-}
+      # Gemini API配置
+      - VITE_GEMINI_API_KEY=${VITE_GEMINI_API_KEY:-}
+      # DeepSeek API配置
+      - VITE_DEEPSEEK_API_KEY=${VITE_DEEPSEEK_API_KEY:-}
+      # SiliconFlow API配置
+      - VITE_SILICONFLOW_API_KEY=${VITE_SILICONFLOW_API_KEY:-}
+      # 自定义API配置
+      - VITE_CUSTOM_API_KEY=${VITE_CUSTOM_API_KEY:-}
+      - VITE_CUSTOM_API_BASE_URL=${VITE_CUSTOM_API_BASE_URL:-}
+      - VITE_CUSTOM_API_MODEL=${VITE_CUSTOM_API_MODEL:-}
+      - NODE_ENV=production
+    volumes:
+      - ./data:/app/data
+    networks:
+      - prompt_generator_network
+    # 健康检查
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+networks:
+  prompt_generator_network:
+    driver: bridge

@@ -1,0 +1,316 @@
+/**
+ * @file usePromptAssistant.ts
+ * @description 提示词助理的核心组合式函数，提供提示词优化、迭代和版本管理功能
+ * @module @prompt-assistant/ui/composables/usePromptAssistant
+ * @author Prompt Assistant Team
+ * @license MIT
+ */
+
+import { ref, onMounted, watch } from 'vue'
+import { useToast } from './useToast'
+import { useI18n } from 'vue-i18n'
+import { v4 as uuidv4 } from 'uuid'
+import type { Ref } from 'vue'
+import type { 
+  ModelConfig,
+  ModelManager,
+  IHistoryManager,
+  Template,
+  PromptRecordChain,
+  IPromptService,
+  ITemplateManager
+} from '@prompt-assistant/core'
+
+
+type PromptChain = PromptRecordChain
+
+/**
+ * 提示词助理组合式函数
+ * 
+ * @function usePromptAssistant
+ * @description 提供提示词的优化、迭代和版本管理功能，与核心服务交互并管理UI状态
+ * 
+ * @param {ModelManager} modelManager - 模型管理器实例
+ * @param {ITemplateManager} templateManager - 模板管理器实例
+ * @param {IHistoryManager} historyManager - 历史记录管理器实例
+ * @param {Ref<IPromptService | null>} promptService - 提示词服务实例引用
+ * @param {Ref<string>} selectedOptimizeModel - 选中的优化模型标识
+ * @param {Ref<string>} selectedTestModel - 选中的测试模型标识
+ * 
+ * @returns {Object} 提示词助理相关的状态和方法
+ */
+export function usePromptAssistant(
+  modelManager: ModelManager,
+  templateManager: ITemplateManager,
+  historyManager: IHistoryManager,
+  promptService: Ref<IPromptService | null>,
+  selectedOptimizeModel: Ref<string>,
+  selectedTestModel: Ref<string>
+) {
+  const toast = useToast()
+  const { t } = useI18n()
+  
+  // 状态
+  const prompt = ref('')
+  const optimizedPrompt = ref('')
+  const isOptimizing = ref(false)
+  const isIterating = ref(false)
+  const selectedOptimizeTemplate = ref<Template | null>(null)
+  const selectedIterateTemplate = ref<Template | null>(null)
+  const currentChainId = ref('')
+  const currentVersions = ref<PromptChain['versions']>([])
+  const currentVersionId = ref('')
+  
+  // 本地存储key
+  const STORAGE_KEYS = {
+    OPTIMIZE_TEMPLATE: 'app:selected-optimize-template',
+    ITERATE_TEMPLATE: 'app:selected-iterate-template'
+  } as const
+  
+  /**
+   * 处理提示词优化
+   * 
+   * @async
+   * @function handleOptimizePrompt
+   * @description 执行提示词优化流程，调用核心服务并更新状态
+   * @returns {Promise<void>}
+   */
+  const handleOptimizePrompt = async () => {
+    if (!prompt.value.trim() || isOptimizing.value) return
+    if (!promptService.value) {
+      toast.error(t('toast.error.serviceInit'))
+      return
+    }
+    
+    if (!selectedOptimizeTemplate.value) {
+      toast.error(t('toast.error.noOptimizeTemplate'))
+      return
+    }
+    
+    isOptimizing.value = true
+    optimizedPrompt.value = ''  // Clear previous result
+    
+    try {
+      // Use streaming call
+      await promptService.value.optimizePromptStream(
+        prompt.value, 
+        selectedOptimizeModel.value,
+        selectedOptimizeTemplate.value.content,
+        {
+          onToken: (token: string) => {
+            optimizedPrompt.value += token
+          },
+          onComplete: () => {
+            if (!selectedOptimizeTemplate.value) return
+            
+            // Create new record chain
+            const newRecord = historyManager.createNewChain({
+              id: uuidv4(),
+              originalPrompt: prompt.value,
+              optimizedPrompt: optimizedPrompt.value,
+              type: 'optimize',
+              modelKey: selectedOptimizeModel.value,
+              templateId: selectedOptimizeTemplate.value.id,
+              timestamp: Date.now(),
+              metadata: {}
+            });
+            
+            currentChainId.value = newRecord.chainId;
+            currentVersions.value = newRecord.versions;
+            currentVersionId.value = newRecord.currentRecord.id;
+            
+            toast.success(t('toast.success.optimizeSuccess'))
+            isOptimizing.value = false
+          },
+          onError: (error: Error) => {
+            console.error(t('toast.error.optimizeProcessFailed'), error)
+            toast.error(error.message || t('toast.error.optimizeFailed'))
+            isOptimizing.value = false
+          }
+        }
+      )
+    } catch (error: any) {
+      console.error(t('toast.error.optimizeFailed'), error)
+      toast.error(error.message || t('toast.error.optimizeFailed'))
+    } finally {
+      isOptimizing.value = false
+    }
+  }
+  
+  /**
+   * 处理提示词迭代
+   * 
+   * @async
+   * @function handleIteratePrompt
+   * @description 执行提示词迭代流程，基于原始提示词进行改进
+   * @param {Object} params - 迭代参数
+   * @param {string} params.originalPrompt - 原始提示词
+   * @param {string} params.iterateInput - 迭代输入（改进方向描述）
+   * @returns {Promise<void>}
+   */
+  const handleIteratePrompt = async ({ originalPrompt, iterateInput }: { originalPrompt: string, iterateInput: string }) => {
+    if (!originalPrompt || !iterateInput || isIterating.value) return
+    if (!promptService.value) {
+      toast.error(t('toast.error.serviceInit'))
+      return
+    }
+    if (!selectedIterateTemplate.value) {
+      toast.error(t('toast.error.noIterateTemplate'))
+      return
+    }
+
+    isIterating.value = true
+    optimizedPrompt.value = ''  // Clear previous result
+    
+    try {
+      await promptService.value.iteratePromptStream(
+        originalPrompt,
+        iterateInput,
+        selectedOptimizeModel.value,
+        {
+          onToken: (token: string) => {
+            optimizedPrompt.value += token
+          },
+          onComplete: () => {
+            if (!selectedIterateTemplate.value) return
+            
+            const updatedChain = historyManager.addIteration({
+              chainId: currentChainId.value,
+              originalPrompt: originalPrompt,
+              optimizedPrompt: optimizedPrompt.value,
+              iterationNote: iterateInput,
+              modelKey: selectedOptimizeModel.value,
+              templateId: selectedIterateTemplate.value.id
+            });
+            
+            currentVersions.value = updatedChain.versions;
+            currentVersionId.value = updatedChain.currentRecord.id;
+            
+            toast.success(t('toast.success.iterateSuccess'))
+          },
+          onError: (error: Error) => {
+            toast.error(error.message || t('toast.error.iterateFailed'))
+          }
+        },
+        selectedIterateTemplate.value
+      );
+    } catch (error: any) {
+      console.error(t('toast.error.iterateFailed'), error)
+      toast.error(error.message || t('toast.error.iterateFailed'))
+    } finally {
+      isIterating.value = false
+    }
+  }
+  
+  /**
+   * 切换版本
+   * 
+   * @function handleSwitchVersion
+   * @description 切换到指定的提示词版本
+   * @param {PromptChain['versions'][number]} version - 要切换到的版本
+   */
+  const handleSwitchVersion = (version: PromptChain['versions'][number]) => {
+    optimizedPrompt.value = version.optimizedPrompt;
+    currentVersionId.value = version.id;
+  }
+  
+  /**
+   * 保存提示词模板选择
+   * 
+   * @function saveTemplateSelection
+   * @description 将所选模板保存到本地存储
+   * @param {Template} template - 选择的模板
+   * @param {'optimize' | 'iterate'} type - 模板类型
+   */
+  const saveTemplateSelection = (template: Template, type: 'optimize' | 'iterate') => {
+    localStorage.setItem(
+      type === 'optimize' ? STORAGE_KEYS.OPTIMIZE_TEMPLATE : STORAGE_KEYS.ITERATE_TEMPLATE,
+      template.id
+    )
+  }
+  
+  /**
+   * 初始化提示词模板选择
+   * 
+   * @function initTemplateSelection
+   * @description 从本地存储加载已保存的模板选择，如不存在则使用默认值
+   */
+  const initTemplateSelection = () => {
+    try {
+      // 加载优化提示词
+      const optimizeTemplateId = localStorage.getItem(STORAGE_KEYS.OPTIMIZE_TEMPLATE)
+      if (optimizeTemplateId) {
+        try {
+          const optimizeTemplate = templateManager.getTemplate(optimizeTemplateId)
+          if (optimizeTemplate) {
+            selectedOptimizeTemplate.value = optimizeTemplate
+          }
+        } catch (error) {
+          console.warn(t('toast.warn.loadOptimizeTemplateFailed'), error)
+        }
+      }
+      
+      // 如果没有已保存的提示词或加载失败，使用该类型的第一个提示词
+      if (!selectedOptimizeTemplate.value) {
+        const optimizeTemplates = templateManager.listTemplatesByType('optimize')
+        if (optimizeTemplates.length > 0) {
+          selectedOptimizeTemplate.value = optimizeTemplates[0]
+        }
+      }
+      
+      // 加载迭代提示词
+      const iterateTemplateId = localStorage.getItem(STORAGE_KEYS.ITERATE_TEMPLATE)
+      if (iterateTemplateId) {
+        try {
+          const iterateTemplate = templateManager.getTemplate(iterateTemplateId)
+          if (iterateTemplate) {
+            selectedIterateTemplate.value = iterateTemplate
+          }
+        } catch (error) {
+          console.warn(t('toast.warn.loadIterateTemplateFailed'), error)
+        }
+      }
+      
+      // 如果没有已保存的提示词或加载失败，使用该类型的第一个提示词
+      if (!selectedIterateTemplate.value) {
+        const iterateTemplates = templateManager.listTemplatesByType('iterate')
+        if (iterateTemplates.length > 0) {
+          selectedIterateTemplate.value = iterateTemplates[0]
+        }
+      }
+
+      // 如果仍然无法加载任何提示词，显示错误
+      if (!selectedOptimizeTemplate.value || !selectedIterateTemplate.value) {
+        throw new Error(t('toast.error.noDefaultTemplate'))
+      }
+    } catch (error) {
+      console.error(t('toast.error.loadTemplateFailed'), error)
+      toast.error(t('toast.error.loadTemplateFailed'))
+    }
+  }
+
+  // 在 onMounted 中初始化
+  onMounted(() => {
+    initTemplateSelection()
+  })
+
+  return {
+    // 状态
+    prompt,
+    optimizedPrompt,
+    isOptimizing,
+    isIterating,
+    selectedOptimizeTemplate,
+    selectedIterateTemplate,
+    currentChainId,
+    currentVersions,
+    currentVersionId,
+    
+    // 方法
+    handleOptimizePrompt,
+    handleIteratePrompt,
+    handleSwitchVersion,
+    saveTemplateSelection,
+    initTemplateSelection
+  }
+} 

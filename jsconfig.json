@@ -1,0 +1,13 @@
+{
+    "compilerOptions": {
+      "baseUrl": ".",
+      "paths": {
+        "@prompt-assistant/core": ["packages/core"],
+        "@prompt-assistant/ui": ["packages/ui"],
+        "@prompt-assistant/web": ["packages/web"],
+        "@prompt-assistant/extension": ["packages/extension"]
+      }
+    },
+    "include": ["packages/*/src"],
+    "exclude": ["node_modules", "**/node_modules", "**/dist"]
+  }
