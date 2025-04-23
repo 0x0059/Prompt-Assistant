@@ -1,9 +1,8 @@
 /**
  * @file usePromptAssistant.ts
- * @description 提示词助理的核心组合式函数，提供提示词优化、迭代和版本管理功能
- * @module @prompt-assistant/ui/composables/usePromptAssistant
+ * @description 提示词助手核心组合式函数
+ * @module @prompt-assistant/ui/composables
  * @author Prompt Assistant Team
- * @license MIT
  */
 
 import { ref, onMounted, watch } from 'vue'

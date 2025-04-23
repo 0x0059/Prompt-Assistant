@@ -1,9 +1,8 @@
 /**
  * @file errors.ts
- * @description 历史记录管理相关的错误类定义
+ * @description 历史记录服务错误类定义
  * @module @prompt-assistant/core/services/history
  * @author Prompt Assistant Team
- * @license MIT
  */
 
 /**

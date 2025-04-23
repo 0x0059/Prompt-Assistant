@@ -1,9 +1,8 @@
 /**
  * @file types.ts
- * @description 模型管理相关的类型定义，包括模型配置和管理器接口
+ * @description 模型服务相关类型定义
  * @module @prompt-assistant/core/services/model
  * @author Prompt Assistant Team
- * @license MIT
  */
 
 /**

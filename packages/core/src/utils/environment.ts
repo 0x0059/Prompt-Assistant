@@ -3,7 +3,6 @@
  * @description 环境检测与工具函数模块，提供浏览器环境检测、Vercel部署环境检测和API代理URL生成等功能
  * @module @prompt-assistant/core/utils/environment
  * @author Prompt Assistant Team
- * @license MIT
  */
 
 /**

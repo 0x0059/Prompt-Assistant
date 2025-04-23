@@ -1,9 +1,8 @@
 /**
  * @file index.ts
- * @description Core包入口文件，导出所有核心服务、工具和类型定义
+ * @description 核心模块导出文件，集中导出所有服务和实用工具
  * @module @prompt-assistant/core
  * @author Prompt Assistant Team
- * @license MIT
  */
 
 /**

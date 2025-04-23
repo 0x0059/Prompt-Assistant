@@ -89,8 +89,8 @@ Docker部署时通过 `-e` 参数配置环境变量：
 
 ```bash
 # 1. 克隆项目
-git clone https://github.com/0x0059/prompt_assistant.git
-cd prompt_assistant
+git clone https://github.com/0x0059/prompt-assistant.git
+cd prompt-assistant
 
 # 2. 安装依赖
 pnpm install

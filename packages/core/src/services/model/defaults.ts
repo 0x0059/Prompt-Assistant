@@ -3,7 +3,6 @@
  * @description 默认模型配置和环境变量处理，提供预设的模型配置和环境变量获取功能
  * @module @prompt-assistant/core/services/model
  * @author Prompt Assistant Team
- * @license MIT
  */
 
 import { ModelConfig } from './types';

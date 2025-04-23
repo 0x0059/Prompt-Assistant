@@ -3,7 +3,6 @@
  * @description 历史记录管理相关的类型定义，包括提示词记录、记录链和管理器接口
  * @module @prompt-assistant/core/services/history
  * @author Prompt Assistant Team
- * @license MIT
  */
 
 /**

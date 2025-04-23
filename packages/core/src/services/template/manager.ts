@@ -3,7 +3,6 @@
  * @description 提示词模板管理器实现，提供模板的增删改查、导入导出和持久化存储功能
  * @module @prompt-assistant/core/services/template
  * @author Prompt Assistant Team
- * @license MIT
  */
 
 import { ITemplateManager, Template, TemplateManagerConfig, templateSchema } from './types';
