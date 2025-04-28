@@ -4,7 +4,8 @@ import {
   OUTPUT_FORMAT_OPTIMIZE_TEMPLATE,
   ADVANCED_OPTIMIZE_TEMPLATE,
   ITERATE_TEMPLATE,
-  STRUCTURED_FORMAT_TEMPLATE
+  STRUCTURED_FORMAT_TEMPLATE,
+  KEN_TEMPLATE, 
 } from './templates';
 
 /**
@@ -89,5 +90,12 @@ export const DEFAULT_TEMPLATES: Record<string, Template> = {
     '指令型优化',
     STRUCTURED_FORMAT_TEMPLATE,
     createMetadata('1.0', AUTHORS.MOYU, '适用于指令型提示词的优化，优化的同时遵循原指令', TEMPLATE_TYPES.OPTIMIZE)
+  ),
+
+  'Ken': createTemplate(
+    'Ken',
+    '肯尼迪',
+    KEN_TEMPLATE,
+    createMetadata('1.0', AUTHORS.MOYU, '优化资料', TEMPLATE_TYPES.OPTIMIZE)
   )
 }; 
