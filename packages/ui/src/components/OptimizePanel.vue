@@ -41,6 +41,7 @@
       <PromptPanelUI 
         v-model:optimized-prompt="optimizedPrompt"
         :is-iterating="isIterating"
+        :is-optimizing="isOptimizing"
         v-model:selected-iterate-template="selectedIterateTemplate"
         :versions="currentVersions"
         :current-version-id="currentVersionId"
