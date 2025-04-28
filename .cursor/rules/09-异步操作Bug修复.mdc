@@ -1,0 +1,298 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# 异步操作Bug修复指南
+
+本规则专注于Prompt Assistant项目中常见的异步操作相关bug，包括API请求、状态更新和流式响应处理。
+
+## 异步操作常见问题
+
+在前端应用中，异步操作是bug的高发区域，主要表现为：
+
+1. **竞态条件** - 多个异步操作的完成顺序与发起顺序不一致
+2. **异常处理缺失** - 未正确捕获和处理Promise中的错误
+3. **状态不同步** - 异步操作完成后未正确更新UI状态
+4. **超时和取消处理** - 长时间异步操作的超时和用户取消处理不当
+5. **流式数据处理错误** - 在流式响应中，数据解析和累加处理有误
+
+## 异步处理关键文件
+
+Prompt Assistant项目中关键的异步处理代码位于：
+
+- [packages/core/src/services/llm/](mdc:Users/X/LLM/Prompt-Assistant/packages/core/src/services/llm) - LLM服务的异步请求
+- [api/stream.js](mdc:Users/X/LLM/Prompt-Assistant/api/stream.js) - 流式响应处理
+- [api/proxy.js](mdc:Users/X/LLM/Prompt-Assistant/api/proxy.js) - API代理处理
+
+## 竞态条件修复
+
+竞态条件是最常见的异步bug之一，当用户快速触发多个操作时容易出现。
+
+### 问题示例
+
+```javascript
+// 问题代码
+let currentData = null;
+
+async function fetchData(id) {
+  const response = await api.get(`/data/${id}`);
+  currentData = response.data; // 后发起的请求可能先完成
+  updateUI(currentData);
+}
+
+// 用户快速点击不同选项，调用fetchData(1), fetchData(2), fetchData(3)
+// 可能导致显示错误的数据
+```
+
+### 修复方法
+
+1. **使用请求标识符**
+
+```javascript
+// 修复方法1：使用请求标识符
+let latestRequestId = 0;
+
+async function fetchData(id) {
+  const requestId = ++latestRequestId;
+  const response = await api.get(`/data/${id}`);
+  
+  // 只有最新请求的结果才会被使用
+  if (requestId === latestRequestId) {
+    currentData = response.data;
+    updateUI(currentData);
+  }
+}
+```
+
+2. **使用AbortController取消旧请求**
+
+```javascript
+// 修复方法2：取消旧请求
+let currentController = null;
+
+async function fetchData(id) {
+  // 取消之前的请求
+  if (currentController) {
+    currentController.abort();
+  }
+  
+  // 创建新的AbortController
+  currentController = new AbortController();
+  
+  try {
+    const response = await api.get(`/data/${id}`, {
+      signal: currentController.signal
+    });
+    currentData = response.data;
+    updateUI(currentData);
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      // 请求被取消，忽略错误
+      return;
+    }
+    handleError(error);
+  }
+}
+```
+
+## 异常处理修复
+
+未正确处理异步操作中的异常会导致应用崩溃或功能失效。
+
+### 问题示例
+
+```javascript
+// 问题代码
+async function sendPrompt(text) {
+  setLoading(true);
+  const response = await llmService.sendPrompt(text);
+  setLoading(false);
+  setResult(response.result);
+}
+// 如果llmService.sendPrompt失败，setLoading(false)永远不会被调用
+```
+
+### 修复方法
+
+1. **使用try/catch/finally**
+
+```javascript
+// 修复方法1：添加完整的错误处理
+async function sendPrompt(text) {
+  setLoading(true);
+  try {
+    const response = await llmService.sendPrompt(text);
+    setResult(response.result);
+  } catch (error) {
+    setError(error.message);
+    logError('sendPrompt failed', error);
+  } finally {
+    setLoading(false);
+  }
+}
+```
+
+2. **实现全局错误处理**
+
+```javascript
+// 修复方法2：添加全局Promise错误处理
+window.addEventListener('unhandledrejection', event => {
+  console.error('Unhandled promise rejection:', event.reason);
+  notifyUser('操作失败，请重试');
+});
+```
+
+## 流式处理修复
+
+流式数据处理是Prompt Assistant的核心功能，错误处理尤为重要。
+
+### 问题示例
+
+```javascript
+// 问题代码：流式处理中断后没有清理
+let accumulated = '';
+
+function handleStreamResponse(stream) {
+  stream.on('data', chunk => {
+    accumulated += decoder.decode(chunk);
+    updateUI(accumulated);
+  });
+  
+  stream.on('end', () => {
+    finishProcessing(accumulated);
+  });
+}
+// 如果流中断，finishProcessing可能永远不会被调用
+```
+
+### 修复方法
+
+```javascript
+// 修复方法：添加错误、超时和清理处理
+let accumulated = '';
+let streamTimeout = null;
+
+function handleStreamResponse(stream) {
+  // 重置状态
+  accumulated = '';
+  clearTimeout(streamTimeout);
+  
+  // 设置超时处理
+  streamTimeout = setTimeout(() => {
+    stream.cancel();
+    handleError(new Error('Stream response timeout'));
+  }, 30000);
+  
+  stream.on('data', chunk => {
+    accumulated += decoder.decode(chunk);
+    updateUI(accumulated);
+  });
+  
+  stream.on('end', () => {
+    clearTimeout(streamTimeout);
+    finishProcessing(accumulated);
+  });
+  
+  stream.on('error', error => {
+    clearTimeout(streamTimeout);
+    handleError(error);
+    // 决定是否使用已累积的部分数据
+    if (accumulated.length > 0) {
+      finishProcessing(accumulated, true); // 第二参数表示数据不完整
+    }
+  });
+}
+```
+
+## Vue组件中的异步处理
+
+Vue组件中的异步处理需要特别注意组件生命周期。
+
+### 问题示例
+
+```javascript
+// 问题：组件卸载后更新状态
+async function mounted() {
+  const result = await fetchData();
+  this.data = result; // 如果组件已卸载，会产生错误
+}
+```
+
+### 修复方法
+
+```javascript
+// 修复：使用引用检查组件状态
+import { onMounted, onUnmounted, ref } from 'vue';
+
+export default {
+  setup() {
+    const data = ref(null);
+    const isComponentMounted = ref(true);
+    
+    onMounted(async () => {
+      try {
+        const result = await fetchData();
+        if (isComponentMounted.value) {
+          data.value = result;
+        }
+      } catch (error) {
+        if (isComponentMounted.value) {
+          handleError(error);
+        }
+      }
+    });
+    
+    onUnmounted(() => {
+      isComponentMounted.value = false;
+    });
+    
+    return { data };
+  }
+};
+```
+
+## 测试异步代码
+
+为确保异步代码的正确性，应编写针对性测试。
+
+```javascript
+// 测试竞态条件
+test('应该只使用最后一个请求的结果', async () => {
+  // 设置三个不同速度的模拟请求
+  const slow = new Promise(resolve => setTimeout(() => resolve({ data: 'slow' }), 300));
+  const medium = new Promise(resolve => setTimeout(() => resolve({ data: 'medium' }), 200));
+  const fast = new Promise(resolve => setTimeout(() => resolve({ data: 'fast' }), 100));
+  
+  // 模拟API
+  apiMock.get
+    .mockResolvedValueOnce(slow)
+    .mockResolvedValueOnce(medium)
+    .mockResolvedValueOnce(fast);
+  
+  // 按顺序调用三次
+  fetchData('slow');
+  fetchData('medium');
+  fetchData('fast');
+  
+  // 等待所有Promise完成
+  await new Promise(resolve => setTimeout(resolve, 400));
+  
+  // 验证结果是否是最后一个请求的结果
+  expect(currentData).toBe('fast');
+});
+```
+
+## 异步调试技巧
+
+1. **使用async/await简化调试**
+   - 相比嵌套Promise，async/await更易于追踪和调试
+
+2. **日志记录请求ID**
+   - 为每个异步操作分配唯一ID并记录日志，便于追踪
+
+3. **状态检查断点**
+   - 在Chrome DevTools中设置条件断点，仅在状态异常时暂停
+
+4. **网络请求监控**
+   - 使用Network面板监控请求状态、时序和内容

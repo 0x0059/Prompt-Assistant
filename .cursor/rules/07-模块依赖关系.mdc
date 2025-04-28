@@ -1,0 +1,49 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# 项目模块依赖关系
+
+Prompt Assistant 项目使用 pnpm 工作区管理多个模块。模块间依赖关系如下：
+
+```
+web ──────┐
+          │
+extension ─┼──> ui ──> core
+          │
+cli ──────┘  
+```
+
+## 依赖说明
+
+1. **core**: 最基础的模块，包含核心业务逻辑
+   - 不依赖其他内部模块
+   - 依赖外部 AI SDK 如 OpenAI SDK、Google AI SDK 等
+
+2. **ui**: UI 组件库
+   - 依赖 core 模块
+   - 依赖 Vue 3、Element Plus、Tailwind CSS 等
+
+3. **web**: Web 应用
+   - 依赖 ui 模块和 core 模块
+   - 依赖 Vue Router、Pinia 等
+
+4. **extension**: Chrome 扩展
+   - 依赖 ui 模块和 core 模块
+   - 依赖 Chrome Extensions API 等
+
+## 模块导入规则
+
+- 不允许循环依赖
+- 推荐使用命名导入 `import { xxx } from 'xxx'`
+- 高层模块只能导入低层模块，不能反向导入
+- core 模块中的服务之间可以相互导入
+
+## 版本更新规则
+
+更新依赖版本时应遵循以下原则：
+
+1. 先更新 core 模块依赖
+2. 再更新 ui 模块依赖，并确保与 core 兼容
+3. 最后更新 web 和 extension 模块依赖

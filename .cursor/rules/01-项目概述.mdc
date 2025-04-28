@@ -1,0 +1,23 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Prompt Assistant 项目概述
+
+Prompt Assistant 是一个 AI 提示词优化工具，帮助用户编写更高效的 AI 提示词。主要特点包括：
+
+- 智能优化提示词，提高 AI 响应质量
+- 多模型支持 (OpenAI、Gemini、DeepSeek 等)
+- 纯客户端处理，保护用户隐私
+- 提供 Web 应用和 Chrome 扩展
+
+## 项目结构
+
+项目采用模块化架构，分为以下主要模块：
+
+- [packages/core/](mdc:Users/X/LLM/Prompt-Assistant/packages/core) - 核心功能实现
+- [packages/ui/](mdc:Users/X/LLM/Prompt-Assistant/packages/ui) - UI 组件库
+- [packages/web/](mdc:Users/X/LLM/Prompt-Assistant/packages/web) - Web 应用
+- [packages/extension/](mdc:Users/X/LLM/Prompt-Assistant/packages/extension) - Chrome 扩展
+- [api/](mdc:Users/X/LLM/Prompt-Assistant/api) - Vercel Edge API 函数实现

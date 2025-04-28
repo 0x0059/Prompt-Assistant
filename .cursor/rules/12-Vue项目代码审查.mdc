@@ -1,0 +1,421 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Vue项目代码审查规范
+
+本规则提供针对Prompt Assistant项目中Vue组件和相关代码的专项审查指南。
+
+## Vue组件结构规范
+
+### 组件文件组织
+
+组件应遵循以下文件组织结构：
+
+```
+packages/ui/src/components/
+├── common/          # 通用组件
+├── layout/          # 布局组件
+├── prompt/          # 提示词相关组件
+├── model/           # 模型相关组件
+├── settings/        # 设置相关组件
+└── template/        # 模板相关组件
+```
+
+### 组件命名规范
+
+- 文件名使用 **PascalCase** 格式（如 `PromptEditor.vue`）
+- 组件名应具有描述性，避免缩写
+- 组件名应使用前缀来表示其类别：
+  - 通用组件使用 `Base` 前缀（如 `BaseButton.vue`）
+  - 布局组件使用 `Layout` 前缀（如 `LayoutSidebar.vue`）
+  - 特定功能组件使用其功能领域作为前缀（如 `PromptCard.vue`）
+
+### script 部分组织
+
+Vue 3 组件使用 `<script setup>` 时，建议按以下顺序组织代码：
+
+1. **导入语句**
+   - 优先顺序：Vue核心、路由/状态、组件、工具函数、类型
+   - 保持相关导入分组
+
+2. **组件选项**
+   - defineProps
+   - defineEmits
+   - defineExpose
+   - withDefaults
+
+3. **组合式API使用**
+   - useI18n、useRouter等
+
+4. **响应式状态声明**
+   - ref、reactive变量
+   - 提供默认值
+
+5. **计算属性**
+   - 保持计算属性纯粹，避免副作用
+
+6. **监听器**
+   - watch和watchEffect
+   - 清晰注释监听的目的
+
+7. **生命周期钩子**
+   - onMounted, onUnmounted等
+   - 注释钩子的用途
+
+8. **方法定义**
+   - 事件处理方法以handle前缀
+   - 状态变更方法以set前缀
+   - 初始化方法以init前缀
+
+### template 部分规范
+
+1. **结构清晰**
+   - 使用语义化标签
+   - 适当缩进和换行
+   - 大型模板应拆分为子组件
+
+2. **类名规范**
+   - 使用BEM命名规范
+   - 或遵循Tailwind CSS惯例
+
+3. **条件渲染和循环**
+   - 复杂条件使用计算属性
+   - v-for必须指定key属性
+   - 避免v-if和v-for在同一元素
+
+4. **事件处理**
+   - 使用@简写而非v-on
+   - 内联处理器保持简单
+   - 复杂逻辑移至方法中
+
+## 组件通信审查
+
+### Props 设计
+
+检查要点：
+
+- props是否有类型定义？
+- 是否指定了必要的props？
+- props是否有合理的默认值？
+- 是否有props验证？
+- props命名是否遵循驼峰式？
+- 文档注释是否清晰？
+
+良好示例：
+
+```vue
+<script setup>
+/**
+ * 模板卡片组件
+ */
+const props = defineProps({
+  /** 模板唯一标识符 */
+  id: {
+    type: String,
+    required: true,
+    validator: value => value.trim().length > 0
+  },
+  /** 模板标题 */
+  title: {
+    type: String,
+    required: true
+  },
+  /** 模板描述 */
+  description: {
+    type: String,
+    default: ''
+  },
+  /** 模板标签 */
+  tags: {
+    type: Array,
+    default: () => []
+  },
+  /** 是否为精选模板 */
+  featured: {
+    type: Boolean,
+    default: false
+  }
+});
+</script>
+```
+
+### 事件设计
+
+检查要点：
+
+- 是否明确定义了所有会触发的事件？
+- 事件名称是否使用kebab-case？
+- 事件是否传递了适当的数据？
+- 事件处理是否考虑了异常情况？
+
+良好示例：
+
+```vue
+<script setup>
+// 定义组件可能触发的所有事件
+const emit = defineEmits([
+  'update:modelValue',
+  'submit',
+  'cancel',
+  'template-select',
+  'error'
+]);
+
+function handleSubmit() {
+  try {
+    // 处理提交逻辑
+    emit('submit', { content, timestamp: Date.now() });
+  } catch (error) {
+    emit('error', error);
+  }
+}
+
+function handleInputChange(value) {
+  emit('update:modelValue', value);
+}
+
+function selectTemplate(template) {
+  emit('template-select', template);
+}
+</script>
+```
+
+### 全局状态使用
+
+检查要点：
+
+- 是否恰当使用了全局与局部状态？
+- 状态访问是否集中管理？
+- 是否有不必要的状态重复？
+- 是否正确处理了状态的只读/可写权限？
+
+## 性能优化审查
+
+### 不必要渲染优化
+
+检查要点：
+
+- 是否使用了`v-once`优化静态内容？
+- 是否使用了`v-memo`减少重渲染？
+- 列表渲染是否合理设置了key？
+- 是否避免了内联对象和函数导致的不必要重渲染？
+
+良好示例：
+
+```vue
+<template>
+  <!-- 静态内容使用v-once -->
+  <header v-once>
+    <h1>{{ t('app.title') }}</h1>
+  </header>
+  
+  <!-- 大型列表使用v-memo -->
+  <div v-for="item in items" :key="item.id" v-memo="[item.id, item.updated]">
+    <ItemCard :data="item" />
+  </div>
+  
+  <!-- 避免内联对象 -->
+  <PromptCard :config="cardConfig" @click="handleCardClick" />
+</template>
+
+<script setup>
+// 在组件作用域定义配置对象，避免每次渲染都创建新对象
+const cardConfig = {
+  showHeader: true,
+  enableActions: true
+};
+
+// 定义方法引用而非内联
+function handleCardClick() {
+  // 处理点击
+}
+</script>
+```
+
+### 计算属性与方法
+
+检查要点：
+
+- 是否正确使用计算属性而非方法？
+- 计算属性的依赖是否最小化？
+- 是否正确缓存了昂贵的计算？
+
+良好示例：
+
+```vue
+<script setup>
+import { ref, computed } from 'vue';
+
+const items = ref([/* ... */]);
+
+// 正确使用计算属性
+const filteredItems = computed(() => {
+  return items.value.filter(item => item.isActive);
+});
+
+// 使用记忆化缓存复杂计算
+const expensiveComputation = useMemo(() => {
+  // 复杂计算逻辑
+  return result;
+}, [dependency1, dependency2]);
+</script>
+```
+
+### 异步组件与懒加载
+
+检查要点：
+
+- 大型组件是否使用了异步导入？
+- 路由页面是否使用了懒加载？
+- 是否提供了加载状态处理？
+
+良好示例：
+
+```javascript
+// 在路由配置中
+const routes = [
+  {
+    path: '/settings',
+    component: () => import('./views/Settings.vue'),
+    meta: { requiresAuth: true }
+  }
+];
+
+// 在组件中
+import { defineAsyncComponent } from 'vue';
+
+const HeavyChart = defineAsyncComponent({
+  loader: () => import('./components/HeavyChart.vue'),
+  loadingComponent: LoadingSpinner,
+  errorComponent: ErrorDisplay,
+  delay: 200,
+  timeout: 5000
+});
+```
+
+## 国际化审查
+
+检查要点：
+
+- 是否所有用户可见文本都通过国际化系统？
+- 翻译键是否遵循一致的命名规范？
+- 是否处理了插值和复数形式？
+- 是否考虑了文本长度在不同语言中的差异？
+
+良好示例：
+
+```vue
+<template>
+  <div>
+    <h1>{{ t('settings.title') }}</h1>
+    <p>{{ t('settings.description') }}</p>
+    
+    <!-- 带参数的翻译 -->
+    <p>{{ t('common.welcome', { name: username }) }}</p>
+    
+    <!-- 复数处理 -->
+    <p>{{ t('common.items', itemCount) }}</p>
+  </div>
+</template>
+
+<script setup>
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
+</script>
+```
+
+## 工具函数审查
+
+检查要点：
+
+- 工具函数是否纯函数？
+- 是否有清晰的参数和返回值类型？
+- 是否处理了边界情况和错误？
+- 是否有单元测试覆盖？
+
+良好示例：
+
+```typescript
+// utils/string.ts
+
+/**
+ * 截断文本并添加省略号
+ * @param text 要截断的文本
+ * @param maxLength 最大长度（默认100）
+ * @returns 截断后的文本
+ */
+export function truncateText(text: string, maxLength: number = 100): string {
+  if (!text) return '';
+  if (text.length <= maxLength) return text;
+  
+  return text.substring(0, maxLength) + '...';
+}
+
+/**
+ * 格式化日期为本地化字符串
+ * @param date 日期对象或ISO字符串
+ * @param locale 区域设置（默认zh-CN）
+ * @returns 格式化的日期字符串
+ */
+export function formatDate(
+  date: Date | string,
+  locale: string = 'zh-CN'
+): string {
+  try {
+    const dateObj = typeof date === 'string' ? new Date(date) : date;
+    
+    // 检查日期有效性
+    if (isNaN(dateObj.getTime())) {
+      return '无效日期';
+    }
+    
+    return dateObj.toLocaleDateString(locale, {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+  } catch (error) {
+    console.error('Date formatting error:', error);
+    return '无效日期';
+  }
+}
+```
+
+## 关键文件审查重点
+
+### 组件库核心组件
+
+[packages/ui/src/components/prompt/PromptEditor.vue](mdc:Users/X/LLM/Prompt-Assistant/packages/ui/src/components/prompt/PromptEditor.vue) 
+- 审查重点：编辑器实现、交互设计、状态管理
+
+[packages/ui/src/components/model/ModelSelector.vue](mdc:Users/X/LLM/Prompt-Assistant/packages/ui/src/components/model/ModelSelector.vue)
+- 审查重点：模型选择逻辑、API配置
+
+### Web应用页面
+
+[packages/web/src/views/](mdc:Users/X/LLM/Prompt-Assistant/packages/web/src/views)
+- 审查重点：页面结构、路由设计、组件组合
+
+## Vue3最佳实践
+
+1. **优先使用组合式API**
+   - 使用setup函数或`<script setup>`
+   - 按逻辑关注点组织代码，而非选项
+
+2. **响应式数据处理**
+   - 使用ref/reactive定义响应式数据
+   - 解构reactive对象时保留响应性
+   - 尽量使用ref而非reactive以保持一致性
+
+3. **生命周期钩子**
+   - 使用on- 前缀的生命周期钩子
+   - 在setup中注册所有需要的生命周期钩子
+   - 确保在onUnmounted中清理所有资源
+
+4. **组合式函数(Composables)**
+   - 将可重用逻辑提取为组合式函数
+   - 命名使用use前缀
+   - 返回响应式对象和方法

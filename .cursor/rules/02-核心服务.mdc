@@ -1,0 +1,53 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# 核心服务模块
+
+Prompt Assistant 的核心服务位于 [packages/core/src/services/](mdc:Users/X/LLM/Prompt-Assistant/packages/core/src/services) 目录。以下是各个服务模块及其职责：
+
+## 模板服务 (Template Service)
+
+[services/template/](mdc:Users/X/LLM/Prompt-Assistant/packages/core/src/services/template) 
+
+提供模板管理功能，包括：
+- 模板的增删改查
+- 分类和版本控制
+- 内置模板与自定义模板管理
+
+## 历史记录服务 (History Service)
+
+[services/history/](mdc:Users/X/LLM/Prompt-Assistant/packages/core/src/services/history)
+
+提供历史记录管理功能，包括：
+- 提示词迭代记录存储
+- 历史记录加密存储与检索
+- 分页和过滤查询功能
+
+## 大语言模型服务 (LLM Service)
+
+[services/llm/](mdc:Users/X/LLM/Prompt-Assistant/packages/core/src/services/llm)
+
+提供与各种大语言模型的交互功能：
+- 支持 OpenAI、Gemini、DeepSeek 等模型
+- 处理流式响应
+- 错误处理与重试机制
+
+## 模型管理服务 (Model Service)
+
+[services/model/](mdc:Users/X/LLM/Prompt-Assistant/packages/core/src/services/model)
+
+提供 AI 模型配置管理功能：
+- API 密钥安全管理
+- 模型参数配置
+- 模型可用性检测
+
+## 提示词服务 (Prompt Service)
+
+[services/prompt/](mdc:Users/X/LLM/Prompt-Assistant/packages/core/src/services/prompt)
+
+提供提示词处理的核心功能：
+- 提示词优化算法
+- 迭代改进功能
+- 比较测试能力

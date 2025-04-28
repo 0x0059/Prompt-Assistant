@@ -1,0 +1,29 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# UI 组件库
+
+UI 组件库位于 [packages/ui/](mdc:Users/X/LLM/Prompt-Assistant/packages/ui) 目录，为整个应用提供可复用的 UI 组件。
+
+## 组件结构
+
+主要组件位于 [packages/ui/src/components/](mdc:Users/X/LLM/Prompt-Assistant/packages/ui/src/components) 目录。组件按功能分类，包括：
+
+- 通用组件（按钮、输入框等）
+- 布局组件（页面布局、卡片等）
+- 提示词相关组件（编辑器、优化器等）
+- 设置相关组件（模型配置、API 设置等）
+
+## 样式系统
+
+样式文件位于 [packages/ui/src/styles/](mdc:Users/X/LLM/Prompt-Assistant/packages/ui/src/styles) 目录。使用 Tailwind CSS 和自定义 CSS 变量实现主题系统。
+
+## 国际化支持
+
+国际化资源位于 [packages/ui/src/i18n/](mdc:Users/X/LLM/Prompt-Assistant/packages/ui/src/i18n) 目录，支持中文和英文界面。
+
+## 组合式函数
+
+可复用的逻辑封装在 [packages/ui/src/composables/](mdc:Users/X/LLM/Prompt-Assistant/packages/ui/src/composables) 目录中，使用 Vue 3 的 Composition API 风格。

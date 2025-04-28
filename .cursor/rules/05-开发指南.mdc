@@ -1,0 +1,67 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# 开发指南
+
+本规则提供 Prompt Assistant 项目的开发指南和最佳实践。
+
+## 项目设置
+
+项目使用 pnpm 作为包管理工具和工作区管理。主要命令：
+
+```bash
+# 安装依赖
+pnpm install
+
+# 开发模式
+pnpm dev          # 主开发命令：构建 core/ui 并运行 web 应用
+pnpm dev:web      # 仅运行 web 应用
+pnpm dev:ext      # 开发浏览器扩展
+
+# 构建
+pnpm build        # 构建所有模块
+pnpm build:core   # 仅构建核心模块
+pnpm build:ui     # 仅构建 UI 组件库
+pnpm build:web    # 仅构建 Web 应用
+pnpm build:ext    # 仅构建浏览器扩展
+
+# 清理
+pnpm clean        # 清理所有构建产物
+```
+
+## 代码风格
+
+- 使用 TypeScript 进行类型安全开发
+- 使用 Vue 3 组合式 API 风格
+- 遵循模块化、组件化设计原则
+- 使用 ESLint 和 Prettier 保持代码风格一致
+
+## 目录结构约定
+
+- `packages/core/src/services/` - 各种核心服务实现
+- `packages/core/src/types/` - 类型定义
+- `packages/core/src/utils/` - 工具函数
+- `packages/ui/src/components/` - UI 组件
+- `packages/ui/src/composables/` - 组合式函数
+- `packages/web/src/views/` - Web 应用页面
+- `packages/extension/src/` - 浏览器扩展实现
+
+## 国际化指南
+
+项目支持中文和英文界面，国际化资源存放在各模块的 `i18n` 目录。添加新字符串时：
+
+1. 在 `en.json` 和 `zh.json` 文件中同时添加
+2. 使用嵌套结构组织翻译字符串
+3. 使用 `lint:i18n` 命令检查国际化完整性
+
+## 设计模式应用
+
+项目使用多种设计模式，包括：
+
+- 单例模式 - 在各服务 Manager 实现中使用
+- 工厂模式 - 在 LLM 服务和 Prompt 服务创建中使用
+- 适配器模式 - 在整合不同 AI 模型 API 时使用
+- 观察者模式 - 在状态更新和历史记录变更通知中使用
+- 策略模式 - 在模型选择和不同优化策略实现中使用

@@ -1,0 +1,66 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Docker 部署指南
+
+本项目支持 Docker 部署，可以通过以下方式快速部署应用。
+
+## Docker 文件
+
+- [Dockerfile](mdc:Users/X/LLM/Prompt-Assistant/Dockerfile) - 定义容器构建过程
+- [docker-compose.yml](mdc:Users/X/LLM/Prompt-Assistant/docker-compose.yml) - 定义容器服务配置
+- [.dockerignore](mdc:Users/X/LLM/Prompt-Assistant/.dockerignore) - 定义构建时排除的文件
+
+## 基本部署
+
+使用 Docker 命令部署：
+
+```bash
+# 基本部署（使用默认配置）
+docker run -d -p 80:80 --restart unless-stopped --name prompt_assistant 0x0059/prompt_assistant
+```
+
+## 带环境变量的部署
+
+可以通过环境变量配置 API 密钥：
+
+```bash
+# 高级部署（配置API密钥）
+docker run -d -p 80:80 \
+  -e VITE_OPENAI_API_KEY=your_key \
+  -e VITE_GEMINI_API_KEY=your_key \
+  -e VITE_DEEPSEEK_API_KEY=your_key \
+  --restart unless-stopped \
+  --name prompt_assistant \
+  0x0059/prompt_assistant
+```
+
+## 使用 Docker Compose 部署
+
+```bash
+# 1. 克隆仓库
+git clone https://github.com/0x0059/prompt_assistant.git
+cd prompt_assistant
+
+# 2. 创建 .env 文件配置 API 密钥（可选）
+cat > .env << EOF
+VITE_OPENAI_API_KEY=your_openai_api_key
+VITE_GEMINI_API_KEY=your_gemini_api_key
+VITE_DEEPSEEK_API_KEY=your_deepseek_api_key
+EOF
+
+# 3. 启动服务
+docker compose up -d
+```
+
+## 环境变量说明
+
+| 环境变量 | 说明 |
+|----------|------|
+| VITE_OPENAI_API_KEY | OpenAI API 密钥 |
+| VITE_GEMINI_API_KEY | Google Gemini API 密钥 |
+| VITE_DEEPSEEK_API_KEY | DeepSeek API 密钥 |
+| VITE_CUSTOM_API_KEY | 自定义 API 密钥 |
+| VITE_CUSTOM_API_BASE_URL | 自定义 API 基础 URL |

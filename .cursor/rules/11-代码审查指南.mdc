@@ -1,0 +1,301 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# 代码审查指南
+
+本规则提供Prompt Assistant项目的代码审查(Code Review)指南，帮助团队维护高质量的代码库。
+
+## 代码审查目标
+
+代码审查的主要目标是：
+
+1. **确保代码质量** - 识别潜在问题、提高可维护性
+2. **知识共享** - 促进团队成员间的知识传递
+3. **一致性** - 保持代码风格和实现方式的一致
+4. **安全性** - 发现潜在的安全漏洞
+5. **性能优化** - 识别性能瓶颈和优化机会
+
+## 审查清单
+
+### 一般原则
+
+- 代码是否符合项目的编码规范和风格指南？
+- 功能实现是否符合需求？
+- 是否有重复代码可以提取为共享函数？
+- 变量和函数命名是否清晰表达其用途？
+- 注释是否充分解释了复杂逻辑？
+- 是否处理了异常情况和边界条件？
+
+### 前端特定检查
+
+1. **组件设计**
+   - 组件职责是否单一？
+   - 是否适当拆分为更小的组件？
+   - 组件API设计是否清晰直观？
+   - props和事件是否有清晰的文档说明？
+
+2. **UI/UX**
+   - 界面是否符合设计规范？
+   - 是否考虑了不同屏幕尺寸的响应式适配？
+   - 是否支持键盘导航和无障碍访问？
+   - 用户交互是否有适当的反馈？
+
+3. **性能**
+   - 渲染优化：是否避免不必要的渲染？
+   - 计算属性是否正确使用？
+   - 大列表是否使用虚拟滚动？
+   - 资源加载是否优化（懒加载、代码分割）？
+
+4. **状态管理**
+   - 是否合理使用本地状态和全局状态？
+   - 状态更新逻辑是否清晰？
+   - 是否避免状态冗余？
+   - 异步状态操作是否合理处理？
+
+### 与AI交互相关检查
+
+1. **提示词处理**
+   - 提示词构建是否合理？
+   - 是否处理了提示词长度限制？
+   - 上下文管理是否有效？
+   - 是否包含足够的引导和约束？
+
+2. **API调用**
+   - 是否正确处理API错误和异常？
+   - 是否实现了重试机制？
+   - 是否处理了超时情况？
+   - 请求参数和响应处理是否正确？
+
+3. **流式响应**
+   - 流式处理是否正确实现？
+   - 是否处理了连接中断情况？
+   - UI是否适当显示流式更新？
+   - 是否处理了部分响应的累积？
+
+### 安全检查
+
+1. **输入验证**
+   - 用户输入是否经过验证和净化？
+   - 是否防范XSS攻击？
+   - 敏感信息处理是否安全？
+
+2. **认证与授权**
+   - API密钥存储是否安全？
+   - 是否使用安全的通信协议？
+   - 敏感功能是否有权限控制？
+
+## 代码审查流程
+
+### 提交前检查
+
+开发者在提交代码前应完成以下步骤：
+
+1. 确保所有测试通过
+2. 确保代码符合静态分析工具要求
+3. 自我审查代码，核对上述清单
+4. 整理提交信息，清晰描述变更内容
+
+### 审查过程
+
+1. **范围聚焦** - 每次审查控制在200-400行代码
+2. **上下文理解** - 先了解变更目的和背景
+3. **先整体后细节** - 先了解整体结构，再检查具体实现
+4. **建设性反馈** - 提供具体的改进建议而非简单指出问题
+5. **学习机会** - 视代码审查为学习和分享的机会
+
+### 反馈规范
+
+良好的代码审查反馈应遵循：
+
+- **明确** - 清晰指出问题所在
+- **量化** - 尽可能提供具体数据
+- **建设性** - 提供改进建议
+- **友善** - 关注代码而非人
+- **分级** - 区分必须修改和建议修改
+
+反馈示例：
+```
+[必须] `UserService.ts:42` - 缺少对空值的检查，可能导致运行时错误
+建议添加：`if (!user) return null;`
+
+[建议] `PromptEditor.vue:128` - 考虑将此重复逻辑提取为工具函数，提高可维护性
+```
+
+## 审查规范示例
+
+### 良好示例
+
+以下是一些遵循项目规范的代码示例：
+
+#### Vue组件结构
+
+```vue
+<script setup>
+// 1. 导入
+import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
+import { PromptCard } from '@prompt-assistant/ui';
+
+// 2. 组件属性
+const props = defineProps({
+  templateId: { type: String, required: true },
+  initialContent: { type: String, default: '' }
+});
+
+// 3. 事件定义
+const emit = defineEmits(['update', 'submit']);
+
+// 4. 组合式API引用
+const { t } = useI18n();
+
+// 5. 响应式状态
+const content = ref(props.initialContent);
+const isLoading = ref(false);
+
+// 6. 计算属性
+const isValid = computed(() => content.value.length > 0);
+
+// 7. 方法
+function handleSubmit() {
+  if (!isValid.value) return;
+  
+  isLoading.value = true;
+  emit('submit', content.value);
+}
+
+// 8. 生命周期钩子
+onMounted(() => {
+  // 初始化逻辑
+});
+</script>
+
+<template>
+  <div class="prompt-editor">
+    <PromptCard>
+      <textarea
+        v-model="content"
+        :placeholder="t('editor.placeholder')"
+        class="prompt-textarea"
+      />
+      <div class="actions">
+        <button
+          :disabled="!isValid || isLoading"
+          @click="handleSubmit"
+        >
+          {{ t('editor.submit') }}
+        </button>
+      </div>
+    </PromptCard>
+  </div>
+</template>
+```
+
+#### 错误处理
+
+```typescript
+// services/llm/openai.ts
+async function sendPrompt(prompt, options) {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), options.timeout || 30000);
+    
+    const response = await fetch(API_URL, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ prompt }),
+      signal: controller.signal
+    });
+    
+    clearTimeout(timeoutId);
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new ApiError(
+        `API request failed with status ${response.status}`,
+        response.status,
+        errorData
+      );
+    }
+    
+    return await response.json();
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      throw new ApiError('Request timeout', 408);
+    }
+    if (error instanceof ApiError) {
+      throw error;
+    }
+    throw new ApiError(`Network error: ${error.message}`, 0);
+  }
+}
+```
+
+### 需改进示例
+
+以下是一些需要改进的代码示例：
+
+#### 组件过大
+
+```vue
+<!-- 问题: 此组件职责过多，应拆分 -->
+<script setup>
+// 导入了过多依赖，组件做了太多事情
+import { ref, computed, onMounted, watch, nextTick } from 'vue';
+import { useI18n } from 'vue-i18n';
+import { useRouter } from 'vue-router';
+import { useModelManager, usePromptService, useTemplateManager, useHistoryManager } from '@/composables';
+import { Button, Card, Dropdown, Modal, Tabs, Toast, Tooltip } from '@prompt-assistant/ui';
+// ...还有更多导入
+
+// 上百行的实现逻辑...
+</script>
+
+<template>
+  <!-- 过长的模板结构 -->
+  <div>
+    <!-- 数百行HTML结构 -->
+  </div>
+</template>
+```
+
+#### 错误处理不足
+
+```typescript
+// 问题: 缺少错误处理和状态管理
+async function loadModels() {
+  setLoading(true);
+  const models = await api.getModels(); // 没有try/catch
+  setModels(models);
+  setLoading(false); // 如果出错，loading状态永远为true
+}
+```
+
+## 关键文件审查指南
+
+以下文件是项目的核心，审查时需要特别注意：
+
+- [packages/core/src/services/llm/](mdc:Users/X/LLM/Prompt-Assistant/packages/core/src/services/llm) - AI模型接口实现
+- [packages/core/src/services/prompt/](mdc:Users/X/LLM/Prompt-Assistant/packages/core/src/services/prompt) - 提示词处理逻辑
+- [api/stream.js](mdc:Users/X/LLM/Prompt-Assistant/api/stream.js) - 流式响应处理
+- [api/proxy.js](mdc:Users/X/LLM/Prompt-Assistant/api/proxy.js) - API代理实现
+
+## 工具和自动化
+
+推荐在审查过程中利用以下工具：
+
+1. **ESLint** - 静态代码分析
+2. **Vue DevTools** - 检查Vue组件结构
+3. **Lighthouse** - 性能和可访问性检查
+4. **axe** - 无障碍性检查
+5. **TypeScript类型检查** - 确保类型安全
+
+## 总结
+
+高质量的代码审查是保证项目质量的关键环节。通过遵循本指南，团队可以：
+
+- 更早地发现并解决问题
+- 促进知识分享和团队学习
+- 保持代码库的一致性和可维护性
+- 培养积极的团队协作文化

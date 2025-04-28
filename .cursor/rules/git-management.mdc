@@ -1,0 +1,86 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Git 管理规范
+
+## 分支管理
+
+- **主要分支**
+  - `main`: 产品代码的稳定版本
+  - `dev`: 开发环境的集成分支
+
+- **功能分支命名规范**
+  - 新功能: `feature/描述`（例如：`feature/add-llm-service`）
+  - 修复缺陷: `fix/描述`（例如：`fix/api-response-error`）
+  - 性能改进: `perf/描述`（例如：`perf/optimize-model-loading`）
+  - 文档更新: `docs/描述`（例如：`docs/update-readme`）
+  - 重构代码: `refactor/描述`（例如：`refactor/llm-service`）
+
+## 提交信息规范
+
+提交信息应遵循以下格式：
+
+```
+<类型>(<范围>): <简短描述>
+
+<详细描述（可选）>
+
+<关联任务（可选）>
+```
+
+- **类型**:
+  - `feat`: 新功能
+  - `fix`: 缺陷修复
+  - `docs`: 文档更新
+  - `style`: 代码样式调整(不影响功能)
+  - `refactor`: 代码重构
+  - `perf`: 性能优化
+  - `test`: 测试相关
+  - `chore`: 构建过程或辅助工具变动
+
+- **范围**: 变更影响的模块，例如 `core`, `ui`, `web`, `extension`
+
+- **示例**:
+  ```
+  feat(core): 添加新的LLM提供商支持
+  
+  添加对Claude 3的集成支持，包括API调用和流式响应处理
+  
+  相关任务: #123
+  ```
+
+## 工作流程
+
+1. 从最新的`dev`分支创建功能分支
+2. 完成开发并本地测试
+3. 确保代码通过所有的Lint检查和测试（见[.husky](mdc:.husky/pre-commit)预提交钩子）
+4. 提交代码并推送到远程仓库
+5. 创建Pull Request到`dev`分支
+6. 代码审查通过后合并
+
+## 版本发布流程
+
+1. 在`dev`分支完成功能开发和测试
+2. 创建`release/v版本号`分支（例如：`release/v1.0.0`）
+3. 在release分支进行最终测试和准备工作
+4. 完成后合并到`main`分支并打标签
+5. 将发布更新同步回`dev`分支
+
+## 合并策略
+
+- 优先使用"Squash and Merge"策略将功能分支合并到`dev`
+- 使用"Merge Commit"策略将release分支合并到`main`
+
+## 自动化与钩子
+
+项目使用husky配置了Git钩子:
+- [pre-commit](mdc:.husky/pre-commit): 提交前运行lint和格式检查
+- [commit-msg](mdc:.husky/commit-msg): 验证提交消息格式
+
+## 相关配置文件
+
+- [.gitignore](mdc:.gitignore): 定义了Git忽略的文件和目录
+- [package.json](mdc:package.json): 包含项目依赖和脚本
+- [.husky](mdc:.husky): 包含Git钩子配置

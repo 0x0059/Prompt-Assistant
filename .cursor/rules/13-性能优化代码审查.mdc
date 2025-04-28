@@ -1,0 +1,340 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# 性能优化代码审查指南
+
+本规则专注于Prompt Assistant项目的性能优化审查，确保应用在各种设备和网络条件下都能高效运行。
+
+## 前端性能审查关键点
+
+### 渲染性能
+
+#### 组件重渲染优化
+
+- **检查不必要的重渲染**
+  - 使用Vue DevTools的Performance标签分析组件重渲染情况
+  - 检查是否有不必要的父组件状态变化导致子组件重渲染
+  - 确认Props传递是否合理，避免传递不必要的数据
+
+- **memo/useMemo优化**
+  - 检查大型列表渲染是否使用了`v-memo`
+  - 检查昂贵计算是否使用了缓存机制
+  - 确认依赖数组是否最小化
+
+良好示例：
+```vue
+<template>
+  <!-- 使用v-memo优化大型列表 -->
+  <div v-for="template in templates" :key="template.id" v-memo="[template.id, template.updated]">
+    <TemplateCard :data="template" />
+  </div>
+  
+  <!-- 静态内容优化 -->
+  <footer v-once>
+    <AppFooter />
+  </footer>
+</template>
+
+<script setup>
+import { ref, computed, useMemo } from 'vue';
+
+// 复杂计算使用缓存
+const processedData = useMemo(() => {
+  return heavyComputation(rawData.value);
+}, [rawData]);
+</script>
+```
+
+#### 计算属性优化
+
+- **依赖最小化**
+  - 计算属性的依赖项是否最小化
+  - 避免在计算属性中使用整个对象，只使用需要的属性
+
+- **避免副作用**
+  - 计算属性应是纯函数，没有副作用
+  - 避免在计算属性中修改状态
+
+### 数据处理优化
+
+#### 大数据集处理
+
+- **虚拟滚动**
+  - 大型列表(>100项)是否使用虚拟滚动
+  - 推荐使用`vue-virtual-scroller`或类似库
+
+- **分页加载**
+  - 大量数据是否实现分页加载
+  - 是否实现无限滚动而非加载全部数据
+
+#### 提示词处理优化
+
+- **文本处理**
+  - 检查长文本处理是否高效
+  - 避免在UI线程中处理大型提示词
+
+良好示例：
+```javascript
+// 优化大文本处理
+function processLargeText(text) {
+  // 对于超大文本，考虑使用Web Worker
+  if (text.length > 10000) {
+    return processInWorker(text);
+  }
+  
+  // 对于中等文本，使用分块处理避免阻塞UI
+  if (text.length > 1000) {
+    return new Promise(resolve => {
+      setTimeout(() => {
+        const result = processText(text);
+        resolve(result);
+      }, 0);
+    });
+  }
+  
+  // 小型文本直接处理
+  return processText(text);
+}
+```
+
+### 网络性能
+
+#### API请求优化
+
+- **请求合并与缓存**
+  - 检查是否存在可以合并的API请求
+  - 是否对重复请求进行缓存
+  - 是否使用合适的缓存策略（内存缓存、localStorage等）
+
+- **数据预取与懒加载**
+  - 关键数据是否预先加载
+  - 非关键数据是否懒加载
+
+#### 流式处理优化
+
+- **流式处理效率**
+  - 检查流式数据处理是否高效
+  - 确保UI更新不会导致性能问题
+
+良好示例：
+```javascript
+// 优化的流式响应处理
+function handleStreamResponse(stream, updateCallback) {
+  let buffer = '';
+  let updateTimer = null;
+  
+  // 使用RequestAnimationFrame限制UI更新频率
+  function scheduleUpdate() {
+    if (!updateTimer) {
+      updateTimer = requestAnimationFrame(() => {
+        updateCallback(buffer);
+        updateTimer = null;
+      });
+    }
+  }
+  
+  stream.on('data', chunk => {
+    buffer += decoder.decode(chunk);
+    scheduleUpdate();
+  });
+  
+  stream.on('end', () => {
+    if (updateTimer) {
+      cancelAnimationFrame(updateTimer);
+    }
+    updateCallback(buffer, true);
+  });
+}
+```
+
+### 资源加载优化
+
+#### 代码分割与懒加载
+
+- **路由级别分割**
+  - 确认每个路由是否使用了代码分割
+  - 检查是否设置了合理的预加载策略
+
+- **组件级别分割**
+  - 大型组件是否使用了异步加载
+  - 第三方库是否按需导入
+
+良好示例：
+```javascript
+// 路由级别代码分割
+const routes = [
+  {
+    path: '/',
+    component: Home,
+    // 预加载设置页面
+    beforeEnter: () => {
+      const settingsModule = import('./views/Settings.vue');
+    }
+  },
+  {
+    path: '/settings',
+    component: () => import('./views/Settings.vue')
+  }
+];
+
+// 组件级别异步加载
+const MarkdownEditor = defineAsyncComponent({
+  loader: () => import('./components/MarkdownEditor.vue'),
+  loadingComponent: LoadingSpinner,
+  delay: 200
+});
+
+// 第三方库按需导入
+import { debounce, throttle } from 'lodash-es';
+```
+
+#### 资源优化
+
+- **静态资源**
+  - 检查图片是否进行了优化（格式、大小）
+  - 是否使用了合适的图片格式（WebP等）
+  - 大图片是否实现懒加载
+
+## 性能审查工具
+
+在代码审查过程中推荐使用以下工具：
+
+1. **Chrome DevTools**
+   - Performance面板分析渲染性能
+   - Network面板分析网络请求
+   - Memory面板检查内存泄漏
+
+2. **Vue DevTools**
+   - 组件渲染分析
+   - 性能分析插件
+
+3. **Lighthouse**
+   - 全面的性能审查报告
+   - 优化建议
+
+4. **webpack-bundle-analyzer**
+   - 分析打包结果
+   - 识别过大的模块
+
+## 性能相关的关键文件
+
+以下文件对性能影响较大，审查时需要特别关注：
+
+- [packages/core/src/services/llm/](mdc:Users/X/LLM/Prompt-Assistant/packages/core/src/services/llm) - AI模型请求处理
+- [api/stream.js](mdc:Users/X/LLM/Prompt-Assistant/api/stream.js) - 流式响应处理
+- [packages/ui/src/components/prompt/](mdc:Users/X/LLM/Prompt-Assistant/packages/ui/src/components/prompt) - 提示词相关组件
+
+## 常见性能问题和解决方案
+
+### 滚动卡顿
+
+问题示例：
+```vue
+<!-- 问题：直接渲染大列表导致滚动卡顿 -->
+<template>
+  <div class="history-list">
+    <div v-for="item in historyItems" :key="item.id" class="history-item">
+      <!-- 复杂内容 -->
+    </div>
+  </div>
+</template>
+```
+
+解决方案：
+```vue
+<!-- 解决：使用虚拟滚动 -->
+<template>
+  <RecycleScroller
+    class="history-list"
+    :items="historyItems"
+    :item-size="80"
+    key-field="id"
+  >
+    <template #item="{ item }">
+      <div class="history-item">
+        <!-- 复杂内容 -->
+      </div>
+    </template>
+  </RecycleScroller>
+</template>
+```
+
+### 响应缓慢
+
+问题示例：
+```javascript
+// 问题：在主线程中处理大量数据
+function processTemplates(templates) {
+  const result = templates.map(template => {
+    // 复杂处理逻辑
+    return processedTemplate;
+  });
+  
+  setProcessedTemplates(result);
+}
+```
+
+解决方案：
+```javascript
+// 解决：使用Web Worker处理大量数据
+const templateProcessor = new Worker(new URL('./templateProcessor.js', import.meta.url));
+
+function processTemplates(templates) {
+  templateProcessor.postMessage(templates);
+}
+
+templateProcessor.onmessage = event => {
+  setProcessedTemplates(event.data);
+};
+```
+
+### 内存泄漏
+
+问题示例：
+```javascript
+// 问题：组件卸载后没有清理定时器或事件监听
+function setupLivePreview() {
+  const interval = setInterval(() => {
+    updatePreview();
+  }, 1000);
+  
+  window.addEventListener('resize', handleResize);
+}
+```
+
+解决方案：
+```javascript
+// 解决：在组件卸载时清理资源
+import { onMounted, onUnmounted } from 'vue';
+
+function setupLivePreview() {
+  let interval;
+  
+  onMounted(() => {
+    interval = setInterval(() => {
+      updatePreview();
+    }, 1000);
+    
+    window.addEventListener('resize', handleResize);
+  });
+  
+  onUnmounted(() => {
+    clearInterval(interval);
+    window.removeEventListener('resize', handleResize);
+  });
+}
+```
+
+## 性能预算
+
+项目应该设定明确的性能预算：
+
+- **首次内容绘制(FCP)** < 2秒
+- **可交互时间(TTI)** < 5秒
+- **最大内容绘制(LCP)** < 2.5秒
+- **累计布局偏移(CLS)** < 0.1
+- **首次输入延迟(FID)** < 100ms
+
+在代码审查中，评估变更是否可能超出这些预算。

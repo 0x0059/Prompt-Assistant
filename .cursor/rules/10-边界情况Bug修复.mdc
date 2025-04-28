@@ -1,0 +1,508 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# 边界情况Bug修复指南
+
+本规则专注于Prompt Assistant项目中的边界情况处理，确保应用在各种异常情况下仍能正常工作。
+
+## 常见边界情况
+
+前端应用中容易被忽略的边界情况包括：
+
+1. **空值和未定义值** - 数据缺失或API返回不完整数据
+2. **首次加载和刷新** - 应用初始化时的状态处理
+3. **网络异常** - 断网、弱网和间歇性连接问题
+4. **数据极值** - 超大数据量、超长文本或非预期格式
+5. **用户操作时序** - 异常操作顺序和高频操作
+6. **浏览器兼容性** - 不同浏览器的实现差异
+7. **设备适配** - 不同尺寸和性能设备的适配
+
+## 重点关注区域
+
+在Prompt Assistant项目中，以下区域边界情况处理尤为重要：
+
+- [packages/core/src/services/prompt/](mdc:Users/X/LLM/Prompt-Assistant/packages/core/src/services/prompt) - 提示词处理
+- [packages/core/src/services/llm/](mdc:Users/X/LLM/Prompt-Assistant/packages/core/src/services/llm) - AI模型交互
+- [api/stream.js](mdc:Users/X/LLM/Prompt-Assistant/api/stream.js) - 流式响应处理
+
+## 空值和未定义值处理
+
+### 问题示例
+
+```javascript
+// 问题代码
+function processResponse(response) {
+  const items = response.data.items;
+  return items.map(item => item.name.toUpperCase());
+}
+// 如果response.data为null，或items为空数组或undefined，或某个item没有name属性，都会报错
+```
+
+### 修复方法
+
+```javascript
+// 修复：添加完整的空值检查
+function processResponse(response) {
+  // 检查response和data是否存在
+  if (!response || !response.data) {
+    return [];
+  }
+  
+  // 使用可选链和空值合并操作符
+  const items = response.data?.items ?? [];
+  
+  // 使用filter过滤无效项，避免map中出错
+  return items
+    .filter(item => item && typeof item.name === 'string')
+    .map(item => item.name.toUpperCase());
+}
+```
+
+## 首次加载和刷新处理
+
+### 问题示例
+
+```javascript
+// 问题代码：依赖本地存储但没有初始化检查
+function loadUserPreferences() {
+  const prefs = JSON.parse(localStorage.getItem('userPreferences'));
+  applyTheme(prefs.theme);
+  setLanguage(prefs.language);
+}
+// 首次使用时localStorage中没有数据，JSON.parse(null)会报错
+```
+
+### 修复方法
+
+```javascript
+// 修复：添加默认值和初始化处理
+function loadUserPreferences() {
+  // 提供默认配置
+  const defaultPrefs = {
+    theme: 'light',
+    language: 'zh-CN'
+  };
+  
+  try {
+    // 获取存储的偏好并与默认值合并
+    const storedPrefs = localStorage.getItem('userPreferences');
+    const prefs = storedPrefs 
+      ? { ...defaultPrefs, ...JSON.parse(storedPrefs) }
+      : defaultPrefs;
+    
+    // 应用配置
+    applyTheme(prefs.theme);
+    setLanguage(prefs.language);
+    
+    return prefs;
+  } catch (error) {
+    // 存储数据损坏时回退到默认值
+    console.error('Failed to load preferences, using defaults', error);
+    applyTheme(defaultPrefs.theme);
+    setLanguage(defaultPrefs.language);
+    
+    // 重置损坏的存储
+    localStorage.removeItem('userPreferences');
+    return defaultPrefs;
+  }
+}
+```
+
+## 网络异常处理
+
+### 问题示例
+
+```javascript
+// 问题代码：网络错误处理不完善
+async function fetchModels() {
+  try {
+    const models = await api.getModels();
+    setModels(models);
+  } catch (error) {
+    setError('Failed to load models');
+  }
+}
+// 没有考虑重试逻辑和离线状态处理
+```
+
+### 修复方法
+
+```javascript
+// 修复：添加网络状态检测和重试逻辑
+async function fetchModels(retryCount = 3, retryDelay = 1000) {
+  // 检查网络状态
+  if (!navigator.onLine) {
+    setOfflineState(true);
+    setModels(getCachedModels()); // 使用缓存数据
+    return;
+  }
+  
+  let lastError = null;
+  
+  // 重试逻辑
+  for (let attempt = 0; attempt < retryCount; attempt++) {
+    try {
+      // 如果不是首次尝试，等待一段时间
+      if (attempt > 0) {
+        await new Promise(resolve => setTimeout(resolve, retryDelay * attempt));
+      }
+      
+      const models = await api.getModels();
+      setModels(models);
+      cacheModels(models); // 缓存结果用于离线状态
+      setError(null);
+      return models;
+    } catch (error) {
+      lastError = error;
+      // 检查是否是网络错误，如果是则继续重试
+      if (isNetworkError(error) && attempt < retryCount - 1) {
+        continue;
+      }
+      // 其他错误或最后一次尝试失败
+      break;
+    }
+  }
+  
+  // 所有重试都失败了
+  setError(`加载失败: ${getErrorMessage(lastError)}`);
+  setModels(getCachedModels() || []); // 回退到缓存
+  return null;
+}
+
+// 检查是否为网络错误
+function isNetworkError(error) {
+  return (
+    error.message === 'Network Error' ||
+    error.code === 'ECONNABORTED' ||
+    error.response === undefined ||
+    error.request?.status === 0
+  );
+}
+
+// 获取友好错误信息
+function getErrorMessage(error) {
+  if (isNetworkError(error)) {
+    return '网络连接问题，请检查您的网络';
+  }
+  
+  // HTTP错误
+  if (error.response?.status) {
+    switch (error.response.status) {
+      case 401: return '认证失败，请重新登录';
+      case 403: return '您没有权限执行此操作';
+      case 404: return '请求的资源不存在';
+      case 429: return '请求次数过多，请稍后再试';
+      case 500: return '服务器内部错误';
+      default: return `服务器返回错误 (${error.response.status})`;
+    }
+  }
+  
+  return error.message || '未知错误';
+}
+```
+
+## 数据极值处理
+
+### 问题示例
+
+```javascript
+// 问题代码：没有处理极长文本
+function displayPromptResult(result) {
+  resultElement.innerHTML = result;
+  
+  // 滚动到底部
+  resultContainer.scrollTop = resultContainer.scrollHeight;
+}
+// 极长结果可能导致性能问题和UI卡顿
+```
+
+### 修复方法
+
+```javascript
+// 修复：添加数据长度限制和虚拟滚动支持
+function displayPromptResult(result) {
+  // 检查结果长度
+  if (result.length > MAX_DISPLAY_LENGTH) {
+    // 显示截断提示
+    const truncatedResult = result.substring(0, MAX_DISPLAY_LENGTH);
+    resultElement.innerHTML = truncatedResult + 
+      '<div class="truncation-notice">内容过长，已截断显示 <button class="view-full-btn">查看完整结果</button></div>';
+    
+    // 添加查看完整内容的处理
+    document.querySelector('.view-full-btn').addEventListener('click', () => {
+      showFullResultDialog(result);
+    });
+  } else {
+    resultElement.innerHTML = result;
+  }
+  
+  // 使用requestAnimationFrame避免滚动引起的性能问题
+  requestAnimationFrame(() => {
+    resultContainer.scrollTop = resultContainer.scrollHeight;
+  });
+}
+
+// 处理极长内容的对话框
+function showFullResultDialog(content) {
+  // 创建包含虚拟滚动组件的对话框
+  // 虚拟滚动只渲染视口中可见的内容，大幅提高性能
+  const dialog = document.createElement('div');
+  dialog.className = 'full-result-dialog';
+  
+  // 在这里使用虚拟滚动组件加载内容
+  // 如Vue中可以用vue-virtual-scroller或vue-virtual-scroll-grid
+  initializeVirtualScroller(dialog, content);
+  
+  // 显示对话框
+  document.body.appendChild(dialog);
+}
+```
+
+## 用户操作时序处理
+
+### 问题示例
+
+```javascript
+// 问题代码：没有处理快速切换操作
+async function switchModel(modelId) {
+  setLoading(true);
+  await loadModelConfig(modelId);
+  updateUIForModel(modelId);
+  setLoading(false);
+}
+// 用户快速点击不同模型时，可能导致UI状态混乱
+```
+
+### 修复方法
+
+```javascript
+// 修复：添加操作防抖和状态跟踪
+import { debounce } from 'lodash-es';
+
+// 当前活动的模型加载操作
+let currentModelLoadingId = null;
+
+// 防抖包装的模型切换函数
+const debouncedSwitchModel = debounce(async (modelId) => {
+  try {
+    setLoading(true);
+    currentModelLoadingId = modelId;
+    
+    await loadModelConfig(modelId);
+    
+    // 检查是否仍是最新请求
+    if (currentModelLoadingId === modelId) {
+      updateUIForModel(modelId);
+    }
+  } catch (error) {
+    handleError(error);
+  } finally {
+    // 只有当前操作完成时才清除加载状态
+    if (currentModelLoadingId === modelId) {
+      setLoading(false);
+    }
+  }
+}, 300); // 300ms防抖
+
+// 对外暴露的切换函数
+function switchModel(modelId) {
+  // 取消之前的待执行操作
+  debouncedSwitchModel.cancel();
+  
+  // 执行新的切换请求
+  debouncedSwitchModel(modelId);
+}
+```
+
+## 浏览器兼容性处理
+
+### 问题示例
+
+```javascript
+// 问题代码：使用了不兼容的API
+function copyToClipboard(text) {
+  navigator.clipboard.writeText(text);
+}
+// 在某些浏览器或环境中navigator.clipboard可能不可用
+```
+
+### 修复方法
+
+```javascript
+// 修复：添加兼容性检查和降级方案
+function copyToClipboard(text) {
+  // 检查Clipboard API是否可用
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    return navigator.clipboard.writeText(text)
+      .then(() => true)
+      .catch(error => {
+        console.error('Clipboard API failed:', error);
+        return fallbackCopyToClipboard(text);
+      });
+  }
+  
+  // 降级方案
+  return Promise.resolve(fallbackCopyToClipboard(text));
+}
+
+// 降级复制方法
+function fallbackCopyToClipboard(text) {
+  try {
+    // 创建临时文本区域
+    const textArea = document.createElement('textarea');
+    textArea.value = text;
+    
+    // 确保在视口外不可见
+    textArea.style.position = 'fixed';
+    textArea.style.left = '-999999px';
+    textArea.style.top = '-999999px';
+    
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    
+    // 尝试复制
+    const success = document.execCommand('copy');
+    
+    // 清理
+    document.body.removeChild(textArea);
+    
+    return success;
+  } catch (error) {
+    console.error('Fallback clipboard copy failed:', error);
+    return false;
+  }
+}
+```
+
+## 设备适配处理
+
+### 问题示例
+
+```javascript
+// 问题代码：没有考虑移动设备
+function setupEditor() {
+  editor = new AdvancedEditor('#editor', {
+    height: '400px',
+    fullscreenEnabled: true,
+    // 其他配置...
+  });
+}
+// 在移动设备上体验可能很差
+```
+
+### 修复方法
+
+```javascript
+// 修复：添加设备检测和自适应配置
+function setupEditor() {
+  // 检测设备类型
+  const isMobile = window.innerWidth < 768;
+  const isTablet = window.innerWidth >= 768 && window.innerWidth < 1024;
+  
+  // 基础配置
+  const baseConfig = {
+    autosave: true,
+    spellcheck: true,
+  };
+  
+  // 设备特定配置
+  let deviceConfig = {};
+  
+  if (isMobile) {
+    deviceConfig = {
+      height: '200px',
+      toolbar: ['bold', 'italic', 'undo', 'redo'], // 简化工具栏
+      fullscreenEnabled: true,
+      placeholderText: '点击此处输入...',
+      touchEnabled: true,
+      simpleUI: true
+    };
+  } else if (isTablet) {
+    deviceConfig = {
+      height: '300px',
+      toolbar: ['bold', 'italic', 'link', 'heading', 'undo', 'redo'],
+      fullscreenEnabled: true
+    };
+  } else {
+    deviceConfig = {
+      height: '400px',
+      fullscreenEnabled: true,
+      // 完整桌面配置
+      toolbar: ['bold', 'italic', 'link', 'heading', 'code', 'quote', 'list', 'undo', 'redo']
+    };
+  }
+  
+  // 创建编辑器实例
+  editor = new AdvancedEditor('#editor', {
+    ...baseConfig,
+    ...deviceConfig
+  });
+  
+  // 添加窗口大小变化监听
+  window.addEventListener('resize', debounce(() => {
+    updateEditorLayout();
+  }, 250));
+}
+
+// 更新编辑器布局
+function updateEditorLayout() {
+  if (!editor) return;
+  
+  const width = window.innerWidth;
+  
+  if (width < 768) {
+    editor.setSimpleUI(true);
+  } else {
+    editor.setSimpleUI(false);
+  }
+  
+  // 调整高度
+  if (width < 768) {
+    editor.setHeight('200px');
+  } else if (width < 1024) {
+    editor.setHeight('300px');
+  } else {
+    editor.setHeight('400px');
+  }
+}
+```
+
+## 边界情况测试
+
+为找出边界情况bug，使用以下测试策略：
+
+1. **极值测试** - 测试极小、极大、空值和特殊值
+2. **随机测试** - 使用随机生成的输入测试系统
+3. **混沌测试** - 在应用运行时随机干扰和中断
+4. **组合测试** - 测试多个输入的组合效果
+
+```javascript
+// 边界情况测试示例
+describe('提示词处理边界情况', () => {
+  test('空提示词处理', () => {
+    const result = processPrompt('');
+    expect(result).toBe('');
+  });
+  
+  test('超长提示词处理', () => {
+    const longPrompt = 'a'.repeat(10000);
+    const result = processPrompt(longPrompt);
+    expect(result.length).toBeLessThanOrEqual(MAX_PROMPT_LENGTH);
+  });
+  
+  test('特殊字符处理', () => {
+    const specialChars = '!@#$%^&*()_+{}|:"<>?~`-=[]\\;\',./';
+    const result = processPrompt(specialChars);
+    expect(result).toBe(specialChars); // 应保留所有特殊字符
+  });
+  
+  test('多语言处理', () => {
+    const multiLang = '中文English日本語한국어';
+    const result = processPrompt(multiLang);
+    expect(result).toBe(multiLang); // 应正确处理多语言
+  });
+});
+```

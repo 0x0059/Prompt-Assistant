@@ -1,0 +1,31 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# API 代理服务
+
+API 代理服务位于 [api/](mdc:Users/X/LLM/Prompt-Assistant/api) 目录，实现基于 Vercel Edge Functions 的 API 代理功能。
+
+## 主要功能
+
+API 代理服务主要解决以下问题：
+
+1. **跨域问题解决**：解决前端应用与 AI 模型服务之间的跨域限制
+2. **流式响应处理**：处理 AI 模型的流式 SSE 响应数据
+3. **统一接口**：为不同的 AI 模型提供统一的代理接口
+
+## 核心文件
+
+- [api/proxy.js](mdc:Users/X/LLM/Prompt-Assistant/api/proxy.js) - 主要的 API 代理实现，处理请求转发与响应处理
+- [api/stream.js](mdc:Users/X/LLM/Prompt-Assistant/api/stream.js) - 流式响应处理实现，处理 SSE 格式数据
+- [api/vercel-status.js](mdc:Users/X/LLM/Prompt-Assistant/api/vercel-status.js) - Vercel 部署环境检测
+
+## 运行模式
+
+API 代理服务在 Vercel 环境中运行在 Edge Runtime 上，具有以下特点：
+
+- 低延迟处理能力
+- 全球分布式部署
+- 无状态服务模式
+- 适合流式数据处理
