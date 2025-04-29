@@ -1,7 +1,8 @@
 import { ModelConfig } from '../../model/types';
-import { Message, StreamHandlers, ModelInfo } from '../types';
+import { Message, StreamHandlers, ModelInfo, ThinkingResponse } from '../types';
 import { IModelProvider } from './interface';
 import { OpenAIProvider } from './openai';
+import { DeepSeekThoughtExtractor } from '../../../utils/deepseekThoughtExtractor';
 
 /**
  * Anthropic模型提供商
@@ -69,5 +70,33 @@ export class AnthropicProvider implements IModelProvider {
     ];
     
     await this.sendMessage(testMessages);
+  }
+
+  /**
+   * 发送消息并返回包含思考过程的响应
+   * @param {Message[]} messages - 消息列表
+   * @returns {Promise<ThinkingResponse>} 包含思考过程的响应
+   */
+  async sendMessageWithThinking(messages: Message[]): Promise<ThinkingResponse> {
+    try {
+      // Anthropic模型不直接支持思考过程提取，可以通过提示词方式尝试
+      // 使用通用思考提取器尝试解析结果中的思考过程
+      const thoughtExtractor = new DeepSeekThoughtExtractor();
+      const content = await this.sendMessage(messages);
+      const result = thoughtExtractor.extract(content);
+      
+      return {
+        thinking: result.thinking,
+        content: result.answer || content
+      };
+    } catch (error) {
+      console.error('获取思考过程失败:', error);
+      // 错误情况下返回普通响应
+      const content = await this.sendMessage(messages);
+      return {
+        thinking: null,
+        content
+      };
+    }
   }
 } 

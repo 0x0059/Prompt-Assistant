@@ -1,4 +1,4 @@
-import { Message, StreamHandlers, ModelInfo } from '../types';
+import { Message, StreamHandlers, ModelInfo, ThinkingResponse } from '../types';
 
 /**
  * 模型提供商接口
@@ -7,29 +7,34 @@ import { Message, StreamHandlers, ModelInfo } from '../types';
  */
 export interface IModelProvider {
   /**
-   * 发送消息并获取响应
-   * @param {Message[]} messages - 消息列表
-   * @returns {Promise<string>} 模型响应
+   * 发送消息
+   * @param messages 消息列表
+   * @returns 模型响应文本
    */
   sendMessage(messages: Message[]): Promise<string>;
   
   /**
+   * 发送消息并返回带有思考过程的响应
+   * @param messages 消息列表
+   * @returns 包含思考过程的响应结果
+   */
+  sendMessageWithThinking(messages: Message[]): Promise<ThinkingResponse>;
+  
+  /**
    * 发送流式消息
-   * @param {Message[]} messages - 消息列表
-   * @param {StreamHandlers} callbacks - 流式处理回调
-   * @returns {Promise<void>}
+   * @param messages 消息列表
+   * @param callbacks 回调处理函数
    */
   sendMessageStream(messages: Message[], callbacks: StreamHandlers): Promise<void>;
   
   /**
    * 获取模型列表
-   * @returns {Promise<ModelInfo[]>} 模型信息列表
+   * @returns 模型信息列表
    */
   fetchModels(): Promise<ModelInfo[]>;
   
   /**
    * 测试连接
-   * @returns {Promise<void>}
    */
   testConnection(): Promise<void>;
 } 

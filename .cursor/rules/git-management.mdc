@@ -84,3 +84,4 @@ alwaysApply: false
 - [.gitignore](mdc:.gitignore): 定义了Git忽略的文件和目录
 - [package.json](mdc:package.json): 包含项目依赖和脚本
 - [.husky](mdc:.husky): 包含Git钩子配置
+

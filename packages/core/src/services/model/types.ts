@@ -68,6 +68,24 @@ export interface ModelConfig {
    * @optional
    */
   useVercelProxy?: boolean;
+  
+  /**
+   * 温度参数
+   * @type {number}
+   * @description 控制生成文本的随机性，值越高随机性越大，范围通常在0-2之间
+   * @default 0.7
+   * @optional
+   */
+  temperature?: number;
+  
+  /**
+   * 最大生成令牌数
+   * @type {number}
+   * @description 控制生成文本的最大长度，单位为token
+   * @default 1024
+   * @optional
+   */
+  maxTokens?: number;
 }
 
 /**

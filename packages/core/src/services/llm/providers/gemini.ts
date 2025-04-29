@@ -1,8 +1,9 @@
 import { GoogleGenerativeAI, GenerativeModel } from '@google/generative-ai';
 import { ModelConfig } from '../../model/types';
-import { Message, StreamHandlers, ModelInfo } from '../types';
+import { Message, StreamHandlers, ModelInfo, ThinkingResponse } from '../types';
 import { IModelProvider } from './interface';
 import { isVercel, getProxyUrl } from '../../../utils/environment';
+import { DeepSeekThoughtExtractor } from '../../../utils/deepseekThoughtExtractor';
 
 /**
  * Gemini模型提供商
@@ -224,5 +225,44 @@ export class GeminiProvider implements IModelProvider {
    */
   private async smallDelay(): Promise<void> {
     await new Promise(resolve => setTimeout(resolve, 10));
+  }
+  
+  /**
+   * 发送消息并返回包含思考过程的响应
+   * @param {Message[]} messages - 消息列表
+   * @returns {Promise<ThinkingResponse>} 包含思考过程的响应
+   */
+  async sendMessageWithThinking(messages: Message[]): Promise<ThinkingResponse> {
+    try {
+      // 尝试通过修改提示引导模型提供思考过程
+      const messagesWithPrompt = [...messages];
+      
+      // 如果最后一条消息是用户消息，添加思考指导
+      if (messagesWithPrompt.length > 0 && messagesWithPrompt[messagesWithPrompt.length - 1].role === 'user') {
+        const lastMsg = messagesWithPrompt[messagesWithPrompt.length - 1];
+        messagesWithPrompt[messagesWithPrompt.length - 1] = {
+          ...lastMsg,
+          content: `${lastMsg.content}\n\n请先用"<think>...</think>"格式展示你的思考过程，然后给出最终答案。`
+        };
+      }
+      
+      // 获取响应并使用提取器
+      const content = await this.sendMessage(messagesWithPrompt);
+      const thoughtExtractor = new DeepSeekThoughtExtractor();
+      const result = thoughtExtractor.extract(content);
+      
+      return {
+        thinking: result.thinking,
+        content: result.answer || content
+      };
+    } catch (error) {
+      console.error('获取思考过程失败:', error);
+      // 错误情况下返回普通响应
+      const content = await this.sendMessage(messages);
+      return {
+        thinking: null,
+        content
+      };
+    }
   }
 } 

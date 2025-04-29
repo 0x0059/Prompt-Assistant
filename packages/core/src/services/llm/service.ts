@@ -1,4 +1,4 @@
-import { ILLMService, Message, StreamHandlers, ModelOption } from './types';
+import { ILLMService, Message, StreamHandlers, ModelOption, ThinkingResponse } from './types';
 import { ModelConfig } from '../model/types';
 import { ModelManager, modelManager as defaultModelManager } from '../model/manager';
 import { APIError, RequestConfigError, ERROR_MESSAGES } from './errors';
@@ -182,6 +182,44 @@ export class LLMService implements ILLMService {
         throw error;
       }
       throw new APIError(`获取模型列表失败: ${error.message}`);
+    }
+  }
+  
+  /**
+   * 发送消息到指定提供商并获取带有思考过程的响应
+   * @param {Message[]} messages - 消息列表
+   * @param {string} provider - 提供商名称
+   * @returns {Promise<ThinkingResponse>} 包含思考过程的响应
+   * @throws {APIError} 当API调用失败时抛出
+   * @throws {RequestConfigError} 当配置无效时抛出
+   */
+  async sendMessageWithThinking(messages: Message[], provider: string): Promise<ThinkingResponse> {
+    try {
+      if (!provider) {
+        throw new RequestConfigError('模型提供商不能为空');
+      }
+      
+      const modelConfig = this.modelManager.getModel(provider);
+      if (!modelConfig) {
+        throw new RequestConfigError(`模型 ${provider} 不存在`);
+      }
+      
+      Validator.validateModelConfig(modelConfig);
+      Validator.validateMessages(messages);
+      
+      console.log('发送带思考过程的消息:', {
+        provider: modelConfig.provider,
+        model: modelConfig.defaultModel,
+        messagesCount: messages.length
+      });
+      
+      const modelProvider = ModelProviderFactory.createProvider(modelConfig);
+      return await modelProvider.sendMessageWithThinking(messages);
+    } catch (error: any) {
+      if (error instanceof RequestConfigError || error instanceof APIError) {
+        throw error;
+      }
+      throw new APIError(`发送消息失败: ${error.message}`);
     }
   }
 }

@@ -35,6 +35,21 @@ export interface ModelOption {
 }
 
 /**
+ * 带有思考过程的响应结果
+ */
+export interface ThinkingResponse {
+  /**
+   * 最终回答
+   */
+  content: string;
+  
+  /**
+   * 思考过程 (当使用支持思考过程的模型如DeepSeek Reasoner时)
+   */
+  thinking?: string | null;
+}
+
+/**
  * LLM服务接口
  */
 export interface ILLMService {
@@ -44,6 +59,13 @@ export interface ILLMService {
    * @throws {APIError} 当请求失败时
    */
   sendMessage(messages: Message[], provider: string): Promise<string>;
+
+  /**
+   * 发送消息并返回包含思考过程的响应
+   * @throws {RequestConfigError} 当参数无效时
+   * @throws {APIError} 当请求失败时
+   */
+  sendMessageWithThinking(messages: Message[], provider: string): Promise<ThinkingResponse>;
 
   /**
    * 发送流式消息
