@@ -38,6 +38,26 @@ pnpm clean        # 清理所有构建产物
 - 遵循模块化、组件化设计原则
 - 使用 ESLint 和 Prettier 保持代码风格一致
 
+## 提交github
+```bash
+# 获取 github 状态
+git status 
+cd Prompt-Assistant && git status
+
+# 查看远程仓库信息
+git remote -v
+
+# 添加所有更改到暂存区
+git add .
+
+# 创建提交信息
+git commit -m "feat: add DeepSeek model support and update LLM providers"
+
+# 将更改推送到 github远程仓库
+git push origin main
+
+``` 
+
 ## 目录结构约定
 
 - `packages/core/src/services/` - 各种核心服务实现

@@ -1,13 +1,69 @@
 /**
- * DeepSeek Reasoner模型思考过程提取器
- * 用于从DeepSeek模型的输出中提取思考过程和最终答案
+ * 思考过程提取结果接口
  */
 export interface ThoughtExtractionResult {
   thinking: string | null;
   answer: string | null;
 }
 
-export class DeepSeekThoughtExtractor {
+/**
+ * 思考过程提取器接口
+ * 所有思考提取器应实现此接口
+ */
+export interface IThoughtExtractor {
+  /**
+   * 从文本中提取思考过程和最终答案
+   * @param text 模型生成的完整文本
+   * @returns 包含思考过程和最终答案的对象
+   */
+  extract(text: string): ThoughtExtractionResult;
+  
+  /**
+   * 检查文本是否包含思考过程标记
+   * @param text 要检查的文本
+   * @returns 是否包含思考过程标记
+   */
+  hasThinkingMarkers(text: string): boolean;
+}
+
+/**
+ * 思考提取器基类
+ * 提供基本实现和常用方法
+ */
+export abstract class BaseThoughtExtractor implements IThoughtExtractor {
+  /**
+   * 从文本中提取思考过程和最终答案
+   * @param text 模型生成的完整文本
+   * @returns 包含思考过程和最终答案的对象
+   */
+  abstract extract(text: string): ThoughtExtractionResult;
+  
+  /**
+   * 检查文本是否包含思考过程标记
+   * @param text 要检查的文本
+   * @returns 是否包含思考过程标记
+   */
+  abstract hasThinkingMarkers(text: string): boolean;
+  
+  /**
+   * 处理空输入
+   * @protected
+   * @param text 输入文本
+   * @returns 如果输入为空则返回空结果
+   */
+  protected handleEmptyInput(text: string): ThoughtExtractionResult | null {
+    if (!text || text.trim() === '') {
+      return { thinking: null, answer: null };
+    }
+    return null;
+  }
+}
+
+/**
+ * DeepSeek Reasoner模型思考过程提取器
+ * 用于从DeepSeek模型的输出中提取思考过程和最终答案
+ */
+export class DeepSeekThoughtExtractor extends BaseThoughtExtractor {
   private thinkStart = '<think>';
   private thinkEnd = '</think>';
   
@@ -18,9 +74,8 @@ export class DeepSeekThoughtExtractor {
    */
   public extract(text: string): ThoughtExtractionResult {
     // 处理空输入
-    if (!text || text.trim() === '') {
-      return { thinking: null, answer: null };
-    }
+    const emptyResult = this.handleEmptyInput(text);
+    if (emptyResult) return emptyResult;
     
     // 如果没有思考结束标记，则整个文本作为答案返回
     if (!text.includes(this.thinkEnd)) {
