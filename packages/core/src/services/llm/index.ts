@@ -11,6 +11,10 @@ export { ModelProviderFactory } from './providers/factory';
 // 导出验证器
 export { Validator } from './validator';
 
+// 导出提取器和处理器
+export * from './extractors';
+export * from './handlers';
+
 // 导出类型和错误
 export * from './types';
 export * from './errors'; 

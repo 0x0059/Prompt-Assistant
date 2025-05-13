@@ -1,72 +1,144 @@
+/**
+ * @file service.ts
+ * @description LLM服务实现
+ * @module @prompt-assistant/core/services/llm
+ */
+
 import { ILLMService, Message, StreamHandlers, ModelOption, ThinkingResponse } from './types';
 import { ModelConfig } from '../model/types';
 import { ModelManager, modelManager as defaultModelManager } from '../model/manager';
-import { APIError, RequestConfigError, ERROR_MESSAGES } from './errors';
+import { createConfigError, ERROR_MESSAGES } from './errors';
 import { ModelProviderFactory } from './providers/factory';
 import { Validator } from './validator';
 import { IModelProvider } from './providers/interface';
+import { ServiceBase, ILogger } from '../common';
+
+/**
+ * LLM服务选项接口
+ * @interface LLMServiceOptions
+ */
+export interface LLMServiceOptions {
+  /**
+   * 日志记录器
+   * @type {ILogger}
+   */
+  logger?: ILogger;
+  
+  /**
+   * 默认请求超时时间(毫秒)
+   * @type {number}
+   */
+  defaultTimeout?: number;
+  
+  /**
+   * 重试选项
+   * @type {object}
+   */
+  retryOptions?: {
+    /**
+     * 最大重试次数
+     * @type {number}
+     */
+    maxRetries: number;
+    
+    /**
+     * 重试延迟(毫秒)
+     * @type {number}
+     */
+    retryDelay: number;
+  };
+}
 
 /**
  * LLM服务实现类
  * @class LLMService
- * @description 提供与各种大语言模型服务交互的核心功能，支持OpenAI、Gemini等主流模型
+ * @extends {ServiceBase<LLMServiceOptions>}
  * @implements {ILLMService}
+ * @description 提供与各种大语言模型服务交互的核心功能，支持OpenAI、Gemini等主流模型
  */
-export class LLMService implements ILLMService {
+export class LLMService extends ServiceBase<LLMServiceOptions> implements ILLMService {
   /**
    * 创建LLM服务实例
    * @constructor
    * @param {ModelManager} modelManager - 模型管理器实例
+   * @param {LLMServiceOptions} [options] - 服务选项
    */
-  constructor(private modelManager: ModelManager) { }
-
+  constructor(
+    private readonly modelManager: ModelManager,
+    options?: LLMServiceOptions
+  ) {
+    super({
+      options,
+      serviceId: 'LLMService',
+      logger: options?.logger
+    });
+  }
+  
+  /**
+   * 获取默认选项
+   * @protected
+   * @param {LLMServiceOptions} [options] - 用户提供的选项
+   * @returns {Required<LLMServiceOptions>} 合并默认值后的完整选项
+   */
+  protected getDefaultOptions(options?: LLMServiceOptions): Required<LLMServiceOptions> {
+    return {
+      logger: options?.logger || undefined,
+      defaultTimeout: options?.defaultTimeout || 30000,
+      retryOptions: options?.retryOptions || {
+        maxRetries: 2,
+        retryDelay: 1000
+      }
+    } as Required<LLMServiceOptions>;
+  }
+  
   /**
    * 获取并验证模型配置
    * @private
    * @param {string} provider - 提供商名称
-   * @param {Partial<ModelConfig>} [customConfig] - 自定义配置
-   * @param {boolean} [validateFull=true] - 是否进行完整验证
+   * @param {boolean} [validateEnabled=true] - 是否验证模型启用状态
+   * @param {Partial<ModelConfig>} [customConfig] - 自定义配置(可选)
    * @returns {ModelConfig} 验证后的模型配置
-   * @throws {RequestConfigError} 当验证失败时抛出
+   * @throws {ConfigError} 当配置无效时抛出
    */
-  private getValidatedModelConfig(
-    provider: string,
-    customConfig?: Partial<ModelConfig>,
-    validateFull: boolean = true
+  private getValidatedConfig(
+    provider: string, 
+    validateEnabled: boolean = true,
+    customConfig?: Partial<ModelConfig>
   ): ModelConfig {
     if (!provider) {
-      throw new RequestConfigError('模型提供商不能为空');
+      throw createConfigError('模型提供商不能为空');
     }
     
     // 获取基础配置
     let modelConfig = this.modelManager.getModel(provider);
     
     // 如果提供了自定义配置，则合并到基础配置
-    if (customConfig) {
+    if (customConfig && modelConfig) {
       modelConfig = {
         ...modelConfig,
-        ...(customConfig as ModelConfig),
+        ...customConfig,
       };
-    }
-    
-    if (!modelConfig) {
-      console.warn(`模型 ${provider} 不存在，使用自定义配置`);
-      if (!customConfig) {
-        throw new RequestConfigError(`模型 ${provider} 不存在`);
-      }
+    } else if (customConfig && !modelConfig) {
+      // 没有找到模型但提供了自定义配置
       modelConfig = customConfig as ModelConfig;
+      this.log('warn', `模型 ${provider} 不存在，使用自定义配置`);
+    } else if (!modelConfig) {
+      throw createConfigError(`模型 ${provider} 不存在`);
     }
-    
-    // 根据需要进行完整验证或部分验证
-    if (validateFull) {
+
+    // 根据验证级别执行不同的验证
+    if (validateEnabled) {
       Validator.validateModelConfig(modelConfig);
     } else {
-      // 仅验证必要的配置（API URL和密钥）
-      if (!modelConfig.baseURL) {
-        throw new RequestConfigError('API URL不能为空');
+      // 最低级别的验证
+      if (!modelConfig.provider) {
+        throw createConfigError('模型提供商不能为空');
       }
       if (!modelConfig.apiKey) {
-        throw new RequestConfigError(ERROR_MESSAGES.API_KEY_REQUIRED);
+        throw createConfigError(ERROR_MESSAGES.API_KEY_REQUIRED);
+      }
+      if (!modelConfig.baseURL) {
+        throw createConfigError(ERROR_MESSAGES.BASE_URL_REQUIRED);
       }
     }
     
@@ -76,36 +148,54 @@ export class LLMService implements ILLMService {
   /**
    * 创建模型提供商实例
    * @private
-   * @param {ModelConfig} modelConfig - 模型配置
+   * @param {ModelConfig} config - 模型配置
    * @param {boolean} [isStream=false] - 是否为流式请求
    * @returns {IModelProvider} 模型提供商实例
    */
-  private createModelProvider(modelConfig: ModelConfig, isStream: boolean = false): IModelProvider {
-    return ModelProviderFactory.createProvider(modelConfig, isStream);
+  private createProvider(config: ModelConfig, isStream: boolean = false): IModelProvider {
+    return ModelProviderFactory.createProvider(config, isStream);
   }
   
   /**
-   * 包装API调用并统一错误处理
+   * 执行提供商操作
    * @private
-   * @template T
-   * @param {string} operationName - 操作名称（用于日志）
-   * @param {() => Promise<T>} operation - 要执行的异步操作
+   * @template T - 操作结果类型
+   * @param {string} actionName - 操作名称
+   * @param {string} providerKey - 提供商键名
+   * @param {(provider: IModelProvider) => Promise<T>} action - 操作函数
+   * @param {object} [options] - 执行选项
    * @returns {Promise<T>} 操作结果
-   * @throws {APIError | RequestConfigError} 当操作失败时抛出
    */
-  private async executeWithErrorHandling<T>(
-    operationName: string,
-    operation: () => Promise<T>
+  private async executeProviderAction<T>(
+    actionName: string,
+    providerKey: string,
+    action: (provider: IModelProvider) => Promise<T>,
+    options: {
+      validateEnabled?: boolean;
+      customConfig?: Partial<ModelConfig>;
+    } = {}
   ): Promise<T> {
-    try {
-      return await operation();
-    } catch (error: any) {
-      console.error(`${operationName}失败:`, error);
-      if (error instanceof RequestConfigError || error instanceof APIError) {
-        throw error;
+    return this.safeExecute(
+      async () => {
+        const modelConfig = this.getValidatedConfig(
+          providerKey,
+          options.validateEnabled ?? true,
+          options.customConfig
+        );
+        
+        this.log('info', `执行${actionName}操作`, {
+          provider: modelConfig.provider,
+          model: modelConfig.defaultModel
+        });
+        
+        const provider = this.createProvider(modelConfig, actionName.includes('流式'));
+        return await action(provider);
+      },
+      {
+        operationName: actionName,
+        context: { provider: providerKey }
       }
-      throw new APIError(`${operationName}失败: ${error.message}`);
-    }
+    );
   }
   
   /**
@@ -114,22 +204,16 @@ export class LLMService implements ILLMService {
    * @param {string} provider - 提供商名称
    * @returns {Promise<string>} 模型响应
    * @throws {APIError} 当API调用失败时抛出
-   * @throws {RequestConfigError} 当配置无效时抛出
+   * @throws {ConfigError} 当配置无效时抛出
    */
   async sendMessage(messages: Message[], provider: string): Promise<string> {
-    return this.executeWithErrorHandling('发送消息', async () => {
-      Validator.validateMessages(messages);
-      const modelConfig = this.getValidatedModelConfig(provider);
-      
-      console.log('发送消息:', {
-        provider: modelConfig.provider,
-        model: modelConfig.defaultModel,
-        messagesCount: messages.length
-      });
-      
-      const modelProvider = this.createModelProvider(modelConfig);
-      return await modelProvider.sendMessage(messages);
-    });
+    Validator.validateMessages(messages);
+    
+    return this.executeProviderAction(
+      '发送消息',
+      provider,
+      (modelProvider) => modelProvider.sendMessage(messages)
+    );
   }
   
   /**
@@ -139,29 +223,39 @@ export class LLMService implements ILLMService {
    * @param {StreamHandlers} callbacks - 流式处理回调
    * @returns {Promise<void>}
    * @throws {APIError} 当API调用失败时抛出
-   * @throws {RequestConfigError} 当配置无效时抛出
+   * @throws {ConfigError} 当配置无效时抛出
    */
   async sendMessageStream(
     messages: Message[],
     provider: string,
     callbacks: StreamHandlers
   ): Promise<void> {
+    Validator.validateMessages(messages);
+    
+    // 创建带错误处理的回调
+    const wrappedCallbacks: StreamHandlers = {
+      onToken: callbacks.onToken,
+      onComplete: callbacks.onComplete,
+      onError: (error) => {
+        this.log('error', '流式响应错误', {
+          provider,
+          error: error.message
+        });
+        callbacks.onError(error);
+      }
+    };
+    
     try {
-      console.log('开始流式请求:', { provider, messagesCount: messages.length });
-      Validator.validateMessages(messages);
-      
-      const modelConfig = this.getValidatedModelConfig(provider);
-      
-      console.log('获取到模型实例:', {
-        provider: modelConfig.provider,
-        model: modelConfig.defaultModel
-      });
-      
-      const modelProvider = this.createModelProvider(modelConfig, true);
-      await modelProvider.sendMessageStream(messages, callbacks);
+      await this.executeProviderAction(
+        '流式消息',
+        provider,
+        (modelProvider) => modelProvider.sendMessageStream(messages, wrappedCallbacks)
+      );
     } catch (error) {
-      console.error('流式请求失败:', error);
-      callbacks.onError(error instanceof Error ? error : new Error(String(error)));
+      // 确保错误已通过回调处理
+      wrappedCallbacks.onError(
+        error instanceof Error ? error : new Error(String(error))
+      );
       throw error;
     }
   }
@@ -173,17 +267,11 @@ export class LLMService implements ILLMService {
    * @throws {APIError} 当连接测试失败时抛出
    */
   async testConnection(provider: string): Promise<void> {
-    return this.executeWithErrorHandling('连接测试', async () => {
-      const modelConfig = this.getValidatedModelConfig(provider);
-      
-      console.log('测试连接provider:', { 
-        provider,
-        baseURL: modelConfig.baseURL
-      });
-      
-      const modelProvider = this.createModelProvider(modelConfig);
-      await modelProvider.testConnection();
-    });
+    return this.executeProviderAction(
+      '测试连接',
+      provider,
+      (modelProvider) => modelProvider.testConnection()
+    );
   }
   
   /**
@@ -197,20 +285,23 @@ export class LLMService implements ILLMService {
     provider: string,
     customConfig?: Partial<ModelConfig>
   ): Promise<ModelOption[]> {
-    return this.executeWithErrorHandling('获取模型列表', async () => {
-      const modelConfig = this.getValidatedModelConfig(provider, customConfig, false);
-      
-      console.log(`获取 ${modelConfig.name || provider} 的模型列表`);
-      
-      const modelProvider = this.createModelProvider(modelConfig);
-      const models = await modelProvider.fetchModels();
-      
-      // 转换为选项格式
-      return models.map(model => ({
-        value: model.id,
-        label: model.name
-      }));
-    });
+    return this.executeProviderAction(
+      '获取模型列表',
+      provider,
+      async (modelProvider) => {
+        const models = await modelProvider.fetchModels();
+        
+        // 转换为选项格式
+        return models.map(model => ({
+          value: model.id,
+          label: model.name
+        }));
+      },
+      {
+        validateEnabled: false,
+        customConfig
+      }
+    );
   }
   
   /**
@@ -219,30 +310,28 @@ export class LLMService implements ILLMService {
    * @param {string} provider - 提供商名称
    * @returns {Promise<ThinkingResponse>} 包含思考过程的响应
    * @throws {APIError} 当API调用失败时抛出
-   * @throws {RequestConfigError} 当配置无效时抛出
+   * @throws {ConfigError} 当配置无效时抛出
    */
   async sendMessageWithThinking(messages: Message[], provider: string): Promise<ThinkingResponse> {
-    return this.executeWithErrorHandling('发送带思考过程的消息', async () => {
-      Validator.validateMessages(messages);
-      const modelConfig = this.getValidatedModelConfig(provider);
-      
-      console.log('发送带思考过程的消息:', {
-        provider: modelConfig.provider,
-        model: modelConfig.defaultModel,
-        messagesCount: messages.length
-      });
-      
-      const modelProvider = this.createModelProvider(modelConfig);
-      return await modelProvider.sendMessageWithThinking(messages);
-    });
+    Validator.validateMessages(messages);
+    
+    return this.executeProviderAction(
+      '带思考过程的消息',
+      provider,
+      (modelProvider) => modelProvider.sendMessageWithThinking(messages)
+    );
   }
 }
 
 /**
  * 创建LLM服务实例
  * @param {ModelManager} [modelManager=defaultModelManager] - 模型管理器实例
+ * @param {LLMServiceOptions} [options] - 服务选项
  * @returns {LLMService} LLM服务实例
  */
-export function createLLMService(modelManager: ModelManager = defaultModelManager): LLMService {
-  return new LLMService(modelManager);
+export function createLLMService(
+  modelManager: ModelManager = defaultModelManager,
+  options?: LLMServiceOptions
+): LLMService {
+  return new LLMService(modelManager, options);
 }

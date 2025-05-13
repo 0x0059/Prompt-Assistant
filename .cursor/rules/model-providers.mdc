@@ -1,0 +1,163 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# 模型提供商系统详解
+
+Prompt-Assistant 的模型提供商系统负责与不同的大语言模型 API 进行交互。该系统采用了工厂模式和适配器模式，使得添加新的模型支持变得简单高效。
+
+## 系统架构
+
+模型提供商系统主要包含以下组件：
+
+1. **提供商接口** - 定义所有模型提供商必须实现的方法
+2. **基础提供商** - 提供共享功能的抽象基类
+3. **具体提供商** - 实现特定模型 API 交互的具体类
+4. **工厂方法** - 根据配置创建合适的提供商实例
+
+## 提供商接口：[IModelProvider](mdc:Prompt-Assistant/packages/core/src/services/llm/providers/interface.ts)
+
+`IModelProvider` 接口定义了所有模型提供商必须实现的方法，确保统一的调用方式。
+
+### 核心方法
+
+- `sendMessage(messages, options)` - 发送消息并获取响应
+- `sendMessageStream(messages, options, handlers)` - 发送消息并通过流式处理获取响应
+- `sendMessageWithThinking(messages, options)` - 发送消息并尝试提取思考过程
+- `fetchModels()` - 获取该提供商支持的模型列表
+- `testConnection()` - 测试与 API 的连接是否正常
+
+## 基础提供商：[BaseModelProvider](mdc:Prompt-Assistant/packages/core/src/services/llm/providers/baseProvider.ts)
+
+`BaseModelProvider` 是一个抽象基类，实现了 `IModelProvider` 接口，并提供了共享的基础功能。
+
+### 特点
+
+- 初始化模型配置和思考提取器
+- 提供一些共享实现，减少代码重复
+- 留下抽象方法，要求子类实现具体逻辑
+
+### 核心属性
+
+- `protected modelConfig` - 模型配置信息
+- `protected thoughtExtractor` - 思考提取器实例
+- `protected thinkingExtractor` - 高级思考提取助手实例
+
+## OpenAI 提供商：[OpenAIProvider](mdc:Prompt-Assistant/packages/core/src/services/llm/providers/openai.ts)
+
+`OpenAIProvider` 实现了与 OpenAI API 的交互，是系统中最完整的提供商实现。
+
+### 主要功能
+
+- 创建和配置 OpenAI API 客户端
+- 处理消息发送和响应接收
+- 支持流式响应处理
+- 实现思考提取，包括 DeepSeek Reasoner 和工具调用方法
+- 模型能力检测（如是否支持函数调用）
+
+### 关键方法
+
+- `sendMessage()` - 发送消息到 OpenAI API
+- `sendMessageStream()` - 发送消息并流式处理响应
+- `sendMessageWithThinking()` - 尝试从 DeepSeek Reasoner 或工具调用中获取思考过程
+- `fetchModels()` - 获取可用的 OpenAI 模型
+- `processResponseWithThinking()` - 处理包含思考过程的响应
+
+### 工作流程
+
+```
+           +----------------+
+           | OpenAIProvider |
+           +----------------+
+                   |
+                   v
+          +------------------+
+          | 创建API客户端配置  |
+          +------------------+
+                   |
+                   v
+            +--------------+
+            | 准备消息格式  |
+            +--------------+
+                   |
+                   v
+       +-------------------------+
+       | 检查模型能力            |
+       | (支持工具/函数调用?)    |
+       +-------------------------+
+                   |
+                   v
+       +-------------------------+
+       | 发送API请求             |
+       +-------------------------+
+                   |
+       +-----------+-----------+
+       |                       |
+       v                       v
++----------------+    +-------------------+
+| 处理同步响应   |    | 处理流式响应      |
++----------------+    +-------------------+
+       |                       |
+       v                       v
++----------------+    +-------------------+
+| 提取思考过程   |    | 逐块处理并提取    |
++----------------+    +-------------------+
+       |                       |
+       +-----------+-----------+
+                   |
+                   v
+            +--------------+
+            | 返回最终结果 |
+            +--------------+
+```
+
+## Anthropic 提供商：[AnthropicProvider](mdc:Prompt-Assistant/packages/core/src/services/llm/providers/anthropic.ts)
+
+`AnthropicProvider` 负责与 Anthropic (Claude) API 交互。
+
+### 特点
+
+- 目前使用 OpenAI 兼容模式处理请求
+- 提供硬编码的模型列表，因为 Anthropic API 没有提供模型列表接口
+- 为未来实现直接 Anthropic API 集成提供基础
+
+### 核心方法
+
+- `sendMessage()` - 通过 OpenAI 兼容层发送消息
+- `sendMessageStream()` - 通过 OpenAI 兼容层流式发送消息
+- `fetchModels()` - 返回硬编码的 Claude 模型列表
+
+## 系统调用流程
+
+1. LLMService 根据模型配置选择合适的提供商
+2. 提供商初始化并配置相应的 API 客户端
+3. 提供商处理消息格式，考虑特定 API 的要求
+4. 提供商发送请求到相应的 API
+5. 提供商接收并处理响应，可能包括提取思考过程
+6. 结果返回给 LLMService，再传递给调用者
+
+## 添加新提供商
+
+要添加对新 LLM API 的支持，需要：
+
+1. 创建新的提供商类，继承 `BaseModelProvider`
+2. 实现 `IModelProvider` 接口的所有必要方法
+3. 处理特定 API 的认证、请求格式和响应解析
+4. 在 LLMService 中添加新提供商的工厂逻辑
+
+```typescript
+// 新提供商实现示例
+export class NewProviderClass extends BaseModelProvider {
+  constructor(config: ModelConfig) {
+    super(config);
+    // 初始化特定API客户端
+  }
+  
+  async sendMessage(messages: Message[], options?: SendOptions): Promise<string> {
+    // 实现发送消息逻辑
+  }
+  
+  // 实现其他必要方法...
+}
+```

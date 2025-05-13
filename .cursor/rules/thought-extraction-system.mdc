@@ -1,0 +1,162 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# 思考提取系统详解
+
+Prompt-Assistant 的思考提取系统是一个专门的子系统，用于从大语言模型的响应中提取思考过程和最终答案。这个系统主要包含以下核心组件：
+
+## 系统架构
+
+思考提取系统主要由以下组件组成：
+
+1. **基础提取器** - ThoughtExtractor 类
+2. **特定模型提取器** - 如 DeepSeekThoughtExtractor 类
+3. **高级提取助手** - ThinkingExtractor 类
+
+这些组件之间的关系是：
+- ThoughtExtractor 是基础类，提供通用提取功能
+- 特定模型提取器继承自 ThoughtExtractor，添加模型特定的提取逻辑
+- ThinkingExtractor 协调使用各种提取器处理不同来源的响应
+
+## 基础提取器：[ThoughtExtractor](mdc:Prompt-Assistant/packages/core/src/services/llm/extractors/base/thoughtExtractor.ts)
+
+ThoughtExtractor 是思考提取系统的基础类，提供从文本中提取思考过程和最终答案的通用功能。
+
+### 关键特性
+
+- **多种标记支持** - 支持多种思考块标记格式如 `<think>`, ````thinking`, `Thinking:` 等
+- **智能检测** - 能够自动检测文本中使用的标记格式
+- **鲁棒性处理** - 处理各种特殊情况，如只有结束标记没有开始标记的情况
+- **模块化设计** - 提供可扩展的方法，方便继承和定制
+
+### 核心方法
+
+- `extract(text)` - 主要入口方法，从文本中提取思考过程和答案
+- `detectMarkers(text)` - 检测文本中使用的标记
+- `extractThinkingAndAnswer(text)` - 提取思考内容和最终答案
+- `findAnswerStartIndex(text, endMarkIndex)` - 找到答案开始的位置
+- `hasThinkingMarkers(text)` - 检查文本是否包含思考标记
+
+### 工作流程
+
+1. 接收模型生成的文本
+2. 检测文本中使用的标记类型
+3. 根据标记提取思考过程片段
+4. 提取最终答案部分
+5. 返回包含思考和答案的结果对象
+
+## 特定模型提取器：[DeepSeekThoughtExtractor](mdc:Prompt-Assistant/packages/core/src/services/llm/extractors/providers/deepseekThoughtExtractor.ts)
+
+DeepSeekThoughtExtractor 是针对 DeepSeek 模型输出优化的特定提取器，继承自 ThoughtExtractor 基类。
+
+### 特有功能
+
+- **特定标记支持** - 添加 DeepSeek 特有的标记格式，如 `<thinking>`, `思考：` 等
+- **优化提取逻辑** - 针对 DeepSeek 模型输出特点优化提取算法
+- **回退机制** - 如果特定逻辑提取失败，会回退到基类的通用提取方法
+
+### 关键方法
+
+- `extract(text)` - 重写基类方法，优先使用 DeepSeek 特有提取逻辑
+- `findFirstDeepSeekMarker(text, markers)` - 查找 DeepSeek 特有标记
+- `findDeepSeekAnswerStartIndex(text, defaultStartIndex)` - 查找 DeepSeek 答案开始位置
+- `hasDeepSeekMarkers(text)` - 检查是否包含 DeepSeek 特有标记
+
+## 高级提取助手：[ThinkingExtractor](mdc:Prompt-Assistant/packages/core/src/services/llm/extractors/helpers/thinkingExtractor.ts)
+
+ThinkingExtractor 是更高级的助手类，协调不同来源的思考提取过程，是整个系统的协调者。
+
+### 核心功能
+
+- **响应处理** - 处理完整的 API 响应，而不仅仅是文本内容
+- **多来源支持** - 支持从工具调用、推理模型和普通文本中提取思考过程
+- **整合格式化** - 将提取的思考过程和答案整合成统一格式
+- **推理模型集成** - 直接从推理模型获取思考过程
+
+### 主要方法
+
+- `processResponseWithThinking(response, isDeepSeek, supportsTools, isReasoner)` - 处理包含思考过程的响应
+- `getThinkingFromReasoner(openai, model, messages, temperature, maxTokens)` - 从推理模型获取思考过程
+- `getThinkingFromToolCall(openai, model, messages, temperature, maxTokens)` - 从工具调用获取思考过程
+- `fallbackExtractThinking(content)` - 回退方法，从文本内容中提取思考过程
+
+### 工作流程示例
+
+```
+                            +----------------+
+                            | API Response   |
+                            +----------------+
+                                    |
+                                    v
+                    +----------------------------+
+                    | ThinkingExtractor          |
+                    | processResponseWithThinking|
+                    +----------------------------+
+                                    |
+                     +-----------------------------+
+                     |                             |
+                     v                             v
+          +-------------------+        +------------------------+
+          | Function Call     |        | Reasoner Output       |
+          | (thinking tool)   |        | (text with markers)   |
+          +-------------------+        +------------------------+
+                     |                             |
+                     v                             v
+          +-------------------+        +------------------------+
+          | Parse JSON        |        | ThoughtExtractor      |
+          | Extract 'thoughts'|        | .extract()            |
+          +-------------------+        +------------------------+
+                     |                             |
+                     +-----------------------------+
+                                    |
+                                    v
+                          +-------------------+
+                          | Formatted Output  |
+                          | 思考过程:...      |
+                          | 最终回答:...      |
+                          +-------------------+
+```
+
+## 使用示例
+
+### 基础提取器使用
+
+```typescript
+// 创建基础提取器实例
+const extractor = new ThoughtExtractor();
+
+// 提取思考过程和答案
+const result = extractor.extract(`
+<think>
+我需要考虑几个因素来回答这个问题...
+首先，让我分析一下...
+其次，我还需要考虑...
+</think>
+
+根据以上分析，答案是42。
+`);
+
+console.log(result.thinking); // 输出思考过程
+console.log(result.answer);   // 输出最终答案
+```
+
+### 高级提取助手使用
+
+```typescript
+// 创建思考提取器实例
+const thoughtExtractor = new ThoughtExtractor();
+// 创建高级提取助手实例
+const thinkingExtractor = new ThinkingExtractor(thoughtExtractor);
+
+// 处理API响应
+const formattedResponse = thinkingExtractor.processResponseWithThinking(
+  apiResponse,
+  isDeepSeekModel,
+  modelSupportsTools,
+  isReasonerModel
+);
+
+console.log(formattedResponse); // 包含思考过程和答案的格式化输出
+```

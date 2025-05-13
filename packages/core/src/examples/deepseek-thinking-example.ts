@@ -4,7 +4,7 @@
  */
 import { createLLMService } from '../services/llm/service';
 import { Message, ThinkingResponse } from '../services/llm/types';
-import { DeepSeekThoughtExtractor } from '../utils/deepseekThoughtExtractor';
+import { DeepSeekThoughtExtractor } from '../services/llm/extractors/providers/deepseekThoughtExtractor';
 
 /**
  * 示例1：使用新的API方法获取思考过程

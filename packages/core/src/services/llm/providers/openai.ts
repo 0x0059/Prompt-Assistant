@@ -1,135 +1,32 @@
 import OpenAI from 'openai';
 import { ModelConfig } from '../../model/types';
 import { Message, StreamHandlers, ModelInfo, ThinkingResponse } from '../types';
-import { IModelProvider } from './interface';
+import { BaseModelProvider } from './baseProvider';
 import { isVercel, getProxyUrl } from '../../../utils/environment';
-import { DeepSeekThoughtExtractor, IThoughtExtractor } from '../../../utils/deepseekThoughtExtractor';
+import { ThoughtExtractor } from '../extractors/base/thoughtExtractor';
+import { OpenAIHandler } from '../handlers/openaiHandler';
+import { ThinkingExtractor } from '../extractors/helpers/thinkingExtractor';
 
-/**
- * 思考过程调用策略接口
- */
-interface ThinkingStrategy {
-  prepareMessages(messages: Message[]): any[];
-  extractThinking(response: any): ThinkingResponse;
-}
-
-/**
- * 使用函数调用获取思考过程的策略
- */
-class FunctionCallingStrategy implements ThinkingStrategy {
-  /**
-   * 准备带有思考工具的消息
-   * @param messages 原始消息
-   * @returns 处理后的消息
-   */
-  prepareMessages(messages: Message[]): any[] {
-    return messages.map(msg => ({
-      role: msg.role,
-      content: msg.content
-    }));
-  }
-  
-  /**
-   * 从函数调用响应中提取思考过程
-   * @param response 模型响应
-   * @returns 包含思考过程和最终答案的响应
-   */
-  extractThinking(response: any): ThinkingResponse {
-    let thinking = null;
-    let content = '';
-    
-    // 检查是否有工具调用
-    if (response.tool_calls && response.tool_calls.length > 0) {
-      const thinkingCall = response.tool_calls.find(
-        (call: any) => call.function?.name === 'thinking'
-      );
-      
-      if (thinkingCall) {
-        try {
-          const args = JSON.parse(thinkingCall.function.arguments);
-          thinking = args.thoughts;
-        } catch (e) {
-          console.error('无法解析思考参数:', e);
-        }
-      }
-    }
-    
-    // 获取内容
-    content = response.content || '';
-    
-    return { thinking, content };
-  }
-}
-
-/**
- * 使用特定提示词获取思考过程的策略
- */
-class PromptInstructionStrategy implements ThinkingStrategy {
-  private thoughtExtractor: IThoughtExtractor;
-  
-  constructor(thoughtExtractor: IThoughtExtractor) {
-    this.thoughtExtractor = thoughtExtractor;
-  }
-  
-  /**
-   * 准备带有思考指令的消息
-   * @param messages 原始消息
-   * @returns 处理后的消息
-   */
-  prepareMessages(messages: Message[]): any[] {
-    // 深拷贝消息数组
-    const formattedMessages = [...messages].map(msg => ({
-      role: msg.role,
-      content: msg.content
-    }));
-    
-    // 检查是否已有系统消息
-    const hasSystemMessage = formattedMessages.some(msg => msg.role === 'system');
-    const thinkingInstruction = '在回答问题时，请先用"```thinking"代码块详细展示你的推理过程，然后再给出最终答案。例如：\n```thinking\n这里是详细的推理和思考过程\n```\n\n最终回答：...';
-    
-    // 添加或修改系统消息
-    if (!hasSystemMessage) {
-      // 添加新的系统消息
-      formattedMessages.unshift({
-        role: 'system',
-        content: thinkingInstruction
-      });
-    } else {
-      // 修改现有系统消息
-      for (let i = 0; i < formattedMessages.length; i++) {
-        if (formattedMessages[i].role === 'system') {
-          formattedMessages[i].content += '\n\n' + thinkingInstruction;
-          break;
-        }
-      }
-    }
-    
-    return formattedMessages;
-  }
-  
-  /**
-   * 从响应中提取思考过程
-   * @param content 模型响应内容
-   * @returns 包含思考过程和最终答案的响应
-   */
-  extractThinking(content: string): ThinkingResponse {
-    const result = this.thoughtExtractor.extract(content);
-    return {
-      thinking: result.thinking,
-      content: result.answer || content
-    };
-  }
+// 定义OpenAI配置接口
+interface OpenAIClientConfig {
+  apiKey: string | undefined;
+  baseURL: string | undefined;
+  dangerouslyAllowBrowser: boolean;
+  timeout?: number;
+  maxRetries?: number;
 }
 
 /**
  * OpenAI兼容的模型提供商
  * @class OpenAIProvider
- * @implements {IModelProvider}
+ * @extends {BaseModelProvider}
+ * @description 提供OpenAI API支持，同时内置支持DeepSeek和Ollama等兼容OpenAI API的服务
  */
-export class OpenAIProvider implements IModelProvider {
+export class OpenAIProvider extends BaseModelProvider {
   private openai: OpenAI;
-  private modelConfig: ModelConfig;
-  private thoughtExtractor: IThoughtExtractor;
+  private isStream: boolean;
+  private streamHandler: OpenAIHandler;
+  protected thinkingExtractor: ThinkingExtractor;
   
   /**
    * 创建OpenAI提供商实例
@@ -137,32 +34,48 @@ export class OpenAIProvider implements IModelProvider {
    * @param {boolean} isStream - 是否为流式请求
    */
   constructor(config: ModelConfig, isStream: boolean = false) {
-    this.modelConfig = config;
-    this.thoughtExtractor = new DeepSeekThoughtExtractor();
-    
+    super(config);
+    this.isStream = isStream;
+    this.openai = new OpenAI(this.createOpenAIConfig(config, isStream));
+    this.streamHandler = new OpenAIHandler(this.thoughtExtractor);
+    this.thinkingExtractor = new ThinkingExtractor(this.thoughtExtractor);
+  }
+  
+  /**
+   * 创建OpenAI客户端配置
+   * @private
+   * @param {ModelConfig} config - 模型配置
+   * @param {boolean} isStream - 是否为流式请求
+   * @returns {OpenAIClientConfig} OpenAI客户端配置
+   */
+  private createOpenAIConfig(config: ModelConfig, isStream: boolean): OpenAIClientConfig {
+    // 处理API URL
     let processedBaseURL = config.baseURL;
     if (processedBaseURL?.endsWith('/chat/completions')) {
       processedBaseURL = processedBaseURL.slice(0, -'/chat/completions'.length);
     }
     
+    // 处理Vercel代理
     let finalBaseURL = processedBaseURL;
     if (config.useVercelProxy === true && isVercel() && processedBaseURL) {
       finalBaseURL = getProxyUrl(processedBaseURL, isStream);
       console.log(`使用${isStream ? '流式' : ''}API代理:`, finalBaseURL);
     }
     
-    const openaiConfig: any = {
+    // 创建基础配置
+    const openaiConfig: OpenAIClientConfig = {
       apiKey: config.apiKey,
       baseURL: finalBaseURL,
       dangerouslyAllowBrowser: true
     };
     
+    // 流式请求的特殊配置
     if (isStream) {
       openaiConfig.timeout = 30000;
       openaiConfig.maxRetries = 2;
     }
     
-    this.openai = new OpenAI(openaiConfig);
+    return openaiConfig;
   }
   
   /**
@@ -171,7 +84,6 @@ export class OpenAIProvider implements IModelProvider {
    * @returns {object} 思考工具配置
    */
   private getReasoningTools() {
-    // 定义用于获取思考过程的tools
     return [
       {
         type: "function" as const,
@@ -199,20 +111,14 @@ export class OpenAIProvider implements IModelProvider {
    * @returns {boolean} 是否支持函数调用
    */
   private supportsToolCalling(): boolean {
-    // 检查是否为DeepSeek提供商
-    const isDeepSeek = this.modelConfig.provider?.toLowerCase() === 'deepseek';
+    const isDeepSeek = this.isDeepSeekProvider();
     if (!isDeepSeek) {
-      // 非DeepSeek提供商默认支持
-      return true;
+      return true; // 非DeepSeek提供商默认支持
     }
     
-    // 获取当前使用的模型名称
     const modelName = this.modelConfig.defaultModel?.toLowerCase() || '';
-    
-    // DeepSeek的"reasoner"系列模型不支持函数调用
     const unsupportedModels = ['deepseek-reasoner', 'deepseek-chat'];
     
-    // 检查当前模型是否在不支持列表中
     for (const unsupportedModel of unsupportedModels) {
       if (modelName.includes(unsupportedModel)) {
         console.warn(`模型 ${modelName} 不支持函数调用，将跳过思考过程获取`);
@@ -220,37 +126,106 @@ export class OpenAIProvider implements IModelProvider {
       }
     }
     
-    // 默认支持
     return true;
   }
   
   /**
+   * 检查是否为DeepSeek提供商
+   * @protected
+   * @returns {boolean} 是否为DeepSeek提供商
+   */
+  protected isDeepSeekProvider(): boolean {
+    return this.modelConfig.provider?.toLowerCase() === 'deepseek';
+  }
+  
+  /**
    * 检查是否为DeepSeek推理模型
-   * @private
+   * @protected
    * @returns {boolean} 是否为推理模型
    */
-  private isDeepSeekReasoner(): boolean {
-    // 获取当前使用的模型名称
+  protected isDeepSeekReasoner(): boolean {
     const modelName = this.modelConfig.defaultModel?.toLowerCase() || '';
     return modelName.includes('deepseek-reasoner');
   }
   
   /**
-   * 获取适当的思考策略
-   * @private
-   * @returns {ThinkingStrategy} 思考策略
+   * 为DeepSeek推理模型准备消息
+   * @protected
+   * @param {Message[]} messages - 原始消息
+   * @returns {any[]} 处理后的消息
    */
-  private getThinkingStrategy(): ThinkingStrategy {
-    const supportsTools = this.supportsToolCalling();
-    const isReasoner = this.isDeepSeekReasoner();
+  protected prepareDeepSeekReasonerMessages(messages: Message[]): any[] {
+    const formattedMessages = [...messages].map(msg => ({
+      role: msg.role,
+      content: msg.content
+    }));
     
-    // 如果是推理模型或不支持工具调用，使用提示词策略
-    if (isReasoner || !supportsTools) {
-      return new PromptInstructionStrategy(this.thoughtExtractor);
+    const thinkingPrompt = '\n\n在回答问题时，请先用"```thinking"代码块详细展示你的推理过程，然后再给出最终答案。例如：\n```thinking\n这里是详细的推理和思考过程\n```\n\n最终回答：...';
+    
+    // 检查是否已有系统消息
+    const hasSystemMessage = formattedMessages.some(msg => msg.role === 'system');
+    
+    if (!hasSystemMessage) {
+      // 添加新的系统消息
+      formattedMessages.unshift({
+        role: 'system',
+        content: '请详细分析问题并给出清晰的回答。' + thinkingPrompt
+      });
+    } else {
+      // 修改现有系统消息
+      for (let i = 0; i < formattedMessages.length; i++) {
+        if (formattedMessages[i].role === 'system') {
+          formattedMessages[i].content += thinkingPrompt;
+          break;
+        }
+      }
     }
     
-    // 默认使用函数调用策略
-    return new FunctionCallingStrategy();
+    return formattedMessages;
+  }
+  
+  /**
+   * 准备发送到API的消息
+   * @protected
+   * @param {Message[]} messages - 消息列表
+   * @returns {any[]} 处理后的消息
+   */
+  protected prepareMessages(messages: Message[]): any[] {
+    return messages.map(msg => ({ role: msg.role, content: msg.content }));
+  }
+  
+  /**
+   * 创建请求参数
+   * @private
+   * @param {Message[]} messages - 消息列表
+   * @param {boolean} stream - 是否为流式请求
+   * @returns {object} 请求参数
+   */
+  private createRequestParams(messages: Message[], stream: boolean = false): any {
+    const supportsTools = this.supportsToolCalling();
+    
+    // 准备消息
+    const formattedMessages = this.prepareMessages(messages);
+    
+    // 基础请求参数
+    const requestParams: any = {
+      model: this.modelConfig.defaultModel,
+      messages: formattedMessages,
+      temperature: this.modelConfig.temperature ?? 0.7,
+      stream: stream
+    };
+    
+    // 只有在支持函数调用的情况下才添加tools参数
+    if (supportsTools && !stream) {
+      requestParams.tools = this.getReasoningTools();
+    }
+    
+    // 最大令牌数
+    if (this.modelConfig.maxTokens) {
+      requestParams.max_tokens = this.modelConfig.maxTokens;
+    }
+    
+    return requestParams;
   }
   
   /**
@@ -259,21 +234,24 @@ export class OpenAIProvider implements IModelProvider {
    * @returns {Promise<string>} 模型响应
    */
   async sendMessage(messages: Message[]): Promise<string> {
-    // 默认情况下不需要思考过程提取
-    // 直接发送普通请求
-    const formattedMessages = messages.map(msg => ({
-      role: msg.role,
-      content: msg.content
-    }));
-    
-    const response = await this.openai.chat.completions.create({
-      model: this.modelConfig.defaultModel,
-      messages: formattedMessages,
-      temperature: this.modelConfig.temperature ?? 0.7,
-      max_tokens: this.modelConfig.maxTokens,
-    });
-    
-    return response.choices[0]?.message?.content || '';
+    try {
+      const requestParams = this.createRequestParams(messages);
+      
+      const response = await this.openai.chat.completions.create(requestParams);
+      
+      const isDeepSeek = this.isDeepSeekProvider();
+      const supportsTools = this.supportsToolCalling();
+      const isReasoner = this.isDeepSeekReasoner();
+      
+      const content = this.thinkingExtractor.processResponseWithThinking(
+        response, isDeepSeek, supportsTools, isReasoner
+      );
+      
+      return content;
+    } catch (error) {
+      console.error('发送消息失败:', error);
+      throw error;
+    }
   }
   
   /**
@@ -284,31 +262,52 @@ export class OpenAIProvider implements IModelProvider {
    */
   async sendMessageStream(messages: Message[], callbacks: StreamHandlers): Promise<void> {
     try {
-      const formattedMessages = messages.map(msg => ({
-        role: msg.role,
-        content: msg.content
-      }));
+      console.log('开始创建流式请求...');
       
-      const stream = await this.openai.chat.completions.create({
-        model: this.modelConfig.defaultModel,
-        messages: formattedMessages,
-        temperature: this.modelConfig.temperature ?? 0.7,
-        max_tokens: this.modelConfig.maxTokens,
-        stream: true,
-      });
+      // 创建流式请求参数
+      const requestParams = this.createRequestParams(messages, true);
+      const streamResponse = await this.openai.chat.completions.create(requestParams);
       
+      // 使用类型断言告诉TypeScript这个对象是可以异步迭代的
+      const stream = streamResponse as unknown as AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>;
+      console.log('成功获取到流式响应');
+      
+      // 状态变量
+      const toolState = { isThinking: false, thoughts: '' };
+      const reasonerState = { 
+        reasonerBuffer: '', 
+        inThinkingBlock: false, 
+        hasOutputThinking: false,
+        thoughtsContent: '' 
+      };
+      
+      const isDeepSeek = this.isDeepSeekProvider();
+      const supportsTools = this.supportsToolCalling();
+      const isReasoner = this.isDeepSeekReasoner();
+      
+      // 处理流式响应
       for await (const chunk of stream) {
-        const content = chunk.choices[0]?.delta?.content || '';
-        if (content) {
-          await callbacks.onToken(content);
-          await this.smallDelay();
-        }
+        // 按优先级尝试不同处理器
+        const isToolCallHandled = this.streamHandler.handleThinkingToolCall(
+          chunk, callbacks, toolState, isDeepSeek, supportsTools
+        );
+        if (isToolCallHandled) continue;
+        
+        const isReasonerHandled = this.streamHandler.handleReasonerOutput(
+          chunk, callbacks, reasonerState, isReasoner
+        );
+        if (isReasonerHandled) continue;
+        
+        // 处理普通内容
+        await this.streamHandler.handleRegularContent(chunk, callbacks, toolState);
       }
       
+      console.log('流式响应完成');
       callbacks.onComplete();
     } catch (error) {
       console.error('流式处理过程中出错:', error);
       callbacks.onError(error instanceof Error ? error : new Error(String(error)));
+      throw error;
     }
   }
   
@@ -317,53 +316,31 @@ export class OpenAIProvider implements IModelProvider {
    * @returns {Promise<ModelInfo[]>} 模型信息列表
    */
   async fetchModels(): Promise<ModelInfo[]> {
-    // 对于DeepSeek提供商返回内置模型列表
-    if (this.modelConfig.provider?.toLowerCase() === 'deepseek') {
-      return [
-        { id: 'deepseek-chat', name: 'DeepSeek Chat' },
-        { id: 'deepseek-coder', name: 'DeepSeek Coder' },
-        { id: 'deepseek-reasoner', name: 'DeepSeek Reasoner' }
-      ];
-    }
-    
     try {
+      // 尝试标准 OpenAI 格式的模型列表请求
       const response = await this.openai.models.list();
-      return response.data
-        .filter(model => model.id.includes('gpt'))
-        .map(model => ({
-          id: model.id,
-          name: model.id
-        }));
-    } catch (error) {
-      console.error('获取模型列表失败，返回默认列表:', error);
-      // 请求失败时返回默认模型列表
-      return [
-        { id: 'gpt-4o', name: 'GPT-4o' },
-        { id: 'gpt-4-turbo', name: 'GPT-4 Turbo' },
-        { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo' }
-      ];
-    }
-  }
-  
-  /**
-   * 测试连接
-   * @returns {Promise<void>}
-   */
-  async testConnection(): Promise<void> {
-    try {
-      await this.fetchModels();
+      console.log('API返回的原始模型列表:', response);
+      
+      // 只处理标准 OpenAI 格式
+      if (response && response.data && Array.isArray(response.data)) {
+        return response.data
+          .map(model => ({
+            id: model.id,
+            name: model.id
+          }))
+          .sort((a, b) => a.id.localeCompare(b.id));
+      }
+      
+      // 如果格式不匹配标准格式，记录并返回空数组
+      console.warn('API返回格式与预期不符:', response);
+      return [];
     } catch (error: any) {
-      throw new Error(`无法连接到 ${this.modelConfig.name || 'OpenAI'} API: ${error.message}`);
+      console.error('获取模型列表失败:', error);
+      console.log('错误详情:', error.response?.data || error.message);
+      
+      // 发生错误时返回空数组
+      return [];
     }
-  }
-  
-  /**
-   * 小延迟，用于流式响应
-   * @private
-   * @returns {Promise<void>}
-   */
-  private async smallDelay(): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, 0));
   }
   
   /**
@@ -372,47 +349,55 @@ export class OpenAIProvider implements IModelProvider {
    * @returns {Promise<ThinkingResponse>} 包含思考过程的响应
    */
   async sendMessageWithThinking(messages: Message[]): Promise<ThinkingResponse> {
-    try {
-      // 获取适合当前模型的思考策略
-      const thinkingStrategy = this.getThinkingStrategy();
-      
-      // 根据策略准备消息
-      const preparedMessages = thinkingStrategy.prepareMessages(messages);
-      
-      // 如果使用函数调用策略
-      if (thinkingStrategy instanceof FunctionCallingStrategy) {
-        const response = await this.openai.chat.completions.create({
-          model: this.modelConfig.defaultModel,
-          messages: preparedMessages,
-          temperature: this.modelConfig.temperature ?? 0.7,
-          max_tokens: this.modelConfig.maxTokens,
-          tools: this.getReasoningTools(),
-          tool_choice: "auto"
-        });
-        
-        const result = response.choices[0]?.message;
-        if (!result) {
-          return { content: '', thinking: null };
-        }
-        
-        return thinkingStrategy.extractThinking(result);
-      } else {
-        // 如果使用提示词策略
-        const response = await this.openai.chat.completions.create({
-          model: this.modelConfig.defaultModel,
-          messages: preparedMessages,
-          temperature: this.modelConfig.temperature ?? 0.7,
-          max_tokens: this.modelConfig.maxTokens
-        });
-        
-        const content = response.choices[0]?.message?.content || '';
-        return thinkingStrategy.extractThinking(content);
+    const isReasoner = this.isDeepSeekReasoner();
+    const isDeepSeek = this.isDeepSeekProvider();
+    const supportsTools = this.supportsToolCalling();
+    
+    // 尝试使用DeepSeek Reasoner API
+    if (isReasoner) {
+      try {
+        return await this.thinkingExtractor.getThinkingFromReasoner(
+          this.openai,
+          this.modelConfig.defaultModel || '',
+          messages,
+          this.modelConfig.temperature ?? 0.7,
+          this.modelConfig.maxTokens ?? 1024
+        );
+      } catch (error: any) {
+        console.error('使用DeepSeek Reasoner获取思考过程失败:', error);
+        // 失败时回退到基础方法
+        const content = await this.sendMessage(messages);
+        return this.thinkingExtractor.fallbackExtractThinking(content);
       }
-    } catch (error) {
-      console.error('获取思考过程失败:', error);
-      // 失败时回退到普通响应
-      const content = await this.sendMessage(messages);
-      return { thinking: null, content };
+    } 
+    // 尝试使用工具调用
+    else if (isDeepSeek && supportsTools) {
+      try {
+        return await this.thinkingExtractor.getThinkingFromToolCall(
+          this.openai,
+          this.modelConfig.defaultModel || '',
+          messages,
+          this.getReasoningTools(),
+          this.modelConfig.temperature ?? 0.7,
+          this.modelConfig.maxTokens ?? 1024
+        );
+      } catch (error: any) {
+        console.error('使用工具调用获取思考过程失败:', error);
+        // 错误情况下回退到基类的默认行为
+        return super.sendMessageWithThinking(messages);
+      }
+    } 
+    // 使用基类的默认实现
+    else {
+      return super.sendMessageWithThinking(messages);
     }
+  }
+  
+  /**
+   * 测试连接
+   * @returns {Promise<void>}
+   */
+  async testConnection(): Promise<void> {
+    await super.testConnection();
   }
 } 

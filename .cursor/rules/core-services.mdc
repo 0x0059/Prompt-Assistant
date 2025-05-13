@@ -1,0 +1,86 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# 核心服务详解
+
+Prompt-Assistant 的核心功能主要通过 `packages/core/src/services` 目录下的五个核心服务模块实现。本文档重点介绍这些服务的结构和工作方式。
+
+## LLM服务 (LLMService)
+
+LLM服务是整个应用的核心，负责与各种大语言模型API交互。它采用工厂模式和适配器模式设计，支持多种主流AI模型。
+
+### 服务入口：[service.ts](mdc:Prompt-Assistant/packages/core/src/services/llm/service.ts)
+
+这是LLM服务的主入口，包含以下主要功能：
+- 初始化和配置LLM客户端
+- 提供统一的消息发送接口
+- 处理流式响应
+- 协调不同模型提供商的调用
+
+### 模型提供商：[providers](mdc:Prompt-Assistant/packages/core/src/services/llm/providers)
+
+各模型提供商实现了统一的接口，但针对特定模型优化了调用逻辑：
+
+- [baseProvider.ts](mdc:Prompt-Assistant/packages/core/src/services/llm/providers/baseProvider.ts) - 所有提供商的基类
+- [interface.ts](mdc:Prompt-Assistant/packages/core/src/services/llm/providers/interface.ts) - 定义模型提供商接口
+- [openai.ts](mdc:Prompt-Assistant/packages/core/src/services/llm/providers/openai.ts) - OpenAI模型实现
+- [anthropic.ts](mdc:Prompt-Assistant/packages/core/src/services/llm/providers/anthropic.ts) - Anthropic (Claude) 模型实现
+
+### 思考过程提取系统
+
+这个子系统专门用于从模型响应中提取思考过程和最终答案，支持各种格式的标记提取：
+
+#### 基础提取器：[extractors/base](mdc:Prompt-Assistant/packages/core/src/services/llm/extractors/base)
+
+- [thoughtExtractor.ts](mdc:Prompt-Assistant/packages/core/src/services/llm/extractors/base/thoughtExtractor.ts) - 通用思考提取基类
+- 支持识别多种思考标记如 `<think>`, ````thinking`, `Thinking:` 等
+- 能够从文本中提取思考过程和最终答案
+
+#### 特定模型提取器：[extractors/providers](mdc:Prompt-Assistant/packages/core/src/services/llm/extractors/providers)
+
+- [deepseekThoughtExtractor.ts](mdc:Prompt-Assistant/packages/core/src/services/llm/extractors/providers/deepseekThoughtExtractor.ts) - 针对DeepSeek模型输出优化的提取器
+- 包含特定模型的标记和提取逻辑
+
+#### 高级提取助手：[extractors/helpers](mdc:Prompt-Assistant/packages/core/src/services/llm/extractors/helpers)
+
+- [thinkingExtractor.ts](mdc:Prompt-Assistant/packages/core/src/services/llm/extractors/helpers/thinkingExtractor.ts) - 协调不同模型的思考提取
+- 支持从推理模型获取思考过程
+- 处理工具调用返回的思考内容
+
+### 工作流程
+
+1. LLMService接收消息发送请求
+2. 根据模型类型选择合适的提供商
+3. 提供商处理请求并调用相应的API
+4. 对于支持思考过程的模型，使用提取系统处理响应
+5. 返回最终结果或者通过流式处理器实时返回内容
+
+## 模板服务 (TemplateManager)
+
+模板服务管理提示词模板，提供模板的增删改查和应用功能：
+
+- [template/service.ts](mdc:Prompt-Assistant/packages/core/src/services/template/service.ts) - 模板服务实现
+- [template/types.ts](mdc:Prompt-Assistant/packages/core/src/services/template/types.ts) - 模板相关类型定义
+
+## 历史记录服务 (HistoryManager)
+
+历史记录服务管理提示词和响应的历史记录：
+
+- [history/service.ts](mdc:Prompt-Assistant/packages/core/src/services/history/service.ts) - 历史记录服务实现
+- [history/types.ts](mdc:Prompt-Assistant/packages/core/src/services/history/types.ts) - 历史记录相关类型定义
+
+## 模型管理服务 (ModelManager)
+
+模型管理服务负责API密钥和模型配置的管理：
+
+- [model/service.ts](mdc:Prompt-Assistant/packages/core/src/services/model/service.ts) - 模型管理服务实现
+- [model/types.ts](mdc:Prompt-Assistant/packages/core/src/services/model/types.ts) - 模型配置相关类型定义
+
+## 提示词服务 (PromptService)
+
+提示词服务处理提示词的优化和测试：
+
+- [prompt/service.ts](mdc:Prompt-Assistant/packages/core/src/services/prompt/service.ts) - 提示词服务实现
+- [prompt/types.ts](mdc:Prompt-Assistant/packages/core/src/services/prompt/types.ts) - 提示词相关类型定义

@@ -1,0 +1,86 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Prompt-Assistant 项目概览
+
+Prompt-Assistant 是一个强大的 AI 提示词优化工具，旨在帮助用户编写更有效的 AI 提示词，从而显著提高 AI 响应质量。项目支持 Web 应用和 Chrome 扩展，满足不同场景需求。
+
+## 项目架构
+
+Prompt-Assistant 采用模块化、分层设计，主要包含以下几个层次：
+
+1. **前端应用层** 
+   - [packages/web](mdc:Prompt-Assistant/packages/web) - 基于Vue 3的网页应用
+   - [packages/extension](mdc:Prompt-Assistant/packages/extension) - Chrome扩展版本
+
+2. **共享UI层**
+   - [packages/ui](mdc:Prompt-Assistant/packages/ui) - 基于Vue 3的可复用组件库
+
+3. **核心服务层** 
+   - [packages/core](mdc:Prompt-Assistant/packages/core) - 提供核心业务逻辑
+   - [packages/core/src/services](mdc:Prompt-Assistant/packages/core/src/services) - 包含5个核心服务模块
+
+4. **API层**
+   - [api](mdc:Prompt-Assistant/api) - 基于Vercel Edge Functions的API代理
+
+## 核心模块
+
+### LLM服务 (LLMService)
+
+LLM服务负责与各种大语言模型进行交互，支持多种主流模型。
+
+- [服务实现](mdc:Prompt-Assistant/packages/core/src/services/llm/service.ts) - 主服务类
+- [模型提供商](mdc:Prompt-Assistant/packages/core/src/services/llm/providers) - 各模型提供商实现
+- [数据提取器](mdc:Prompt-Assistant/packages/core/src/services/llm/extractors) - 处理模型响应提取
+
+#### 思考提取系统
+
+该系统专门用于从模型响应中提取思考过程和最终答案：
+
+- **基础提取器** - [ThoughtExtractor](mdc:Prompt-Assistant/packages/core/src/services/llm/extractors/base) 提供基本的思考提取逻辑
+- **特定模型优化** - [DeepSeekThoughtExtractor](mdc:Prompt-Assistant/packages/core/src/services/llm/extractors/providers) 为特定模型优化提取逻辑
+- **高级提取助手** - [ThinkingExtractor](mdc:Prompt-Assistant/packages/core/src/services/llm/extractors/helpers) 协调不同模型的思考提取
+
+### 模板服务 (TemplateManager)
+
+模板服务提供提示词模板的管理和应用功能：
+
+- [模板管理](mdc:Prompt-Assistant/packages/core/src/services/template) - 模板的增删改查功能
+- [模板应用](mdc:Prompt-Assistant/packages/core/src/services/prompt) - 提示词优化与模板应用
+
+### 历史记录服务 (HistoryManager)
+
+负责提示词和响应的历史记录管理：
+
+- [历史记录管理](mdc:Prompt-Assistant/packages/core/src/services/history) - 记录存储和检索
+
+### 模型管理服务 (ModelManager)
+
+负责API密钥和模型配置的管理：
+
+- [模型管理](mdc:Prompt-Assistant/packages/core/src/services/model) - 模型配置和API密钥管理
+
+## 项目运行流程
+
+1. **用户输入流程**：用户界面 → 提示词服务 → LLM服务 → API代理 → 外部AI模型 → 返回结果
+
+2. **提示词优化流程**：原始提示词 → 提示词服务 → 模板服务(应用模板) → LLM服务 → 外部AI模型 → 优化结果 → 历史记录服务(保存)
+
+3. **配置管理流程**：用户界面 → 模型管理服务 → 加密工具(加密API密钥) → 存储工具(本地保存)
+
+## 项目开发指南
+
+查看以下资源快速上手：
+
+- [项目文档](mdc:Prompt-Assistant/docs) - 详细的项目文档
+- [开发指南](mdc:Prompt-Assistant/docs/dev.md) - 开发环境配置和基本流程
+- [技术开发指南](mdc:Prompt-Assistant/docs/technical-development-guide.md) - 深入的技术开发指导
+
+## 当前项目状态
+
+当前项目状态信息可在以下文件中查看：
+
+- [项目状态报告](mdc:Prompt-Assistant/@project-status.md) - 当前项目状态和下一步计划
+- [项目进度记录](mdc:Prompt-Assistant/@progress.md) - 详细的开发进度记录

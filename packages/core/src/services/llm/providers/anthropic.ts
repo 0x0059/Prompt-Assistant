@@ -1,23 +1,20 @@
 import { ModelConfig } from '../../model/types';
-import { Message, StreamHandlers, ModelInfo, ThinkingResponse } from '../types';
-import { IModelProvider } from './interface';
+import { Message, StreamHandlers, ModelInfo } from '../types';
+import { BaseModelProvider } from './baseProvider';
 import { OpenAIProvider } from './openai';
-import { DeepSeekThoughtExtractor } from '../../../utils/deepseekThoughtExtractor';
 
 /**
  * Anthropic模型提供商
  * @class AnthropicProvider
- * @implements {IModelProvider}
+ * @extends {BaseModelProvider}
  */
-export class AnthropicProvider implements IModelProvider {
-  private modelConfig: ModelConfig;
-  
+export class AnthropicProvider extends BaseModelProvider {
   /**
    * 创建Anthropic提供商实例
    * @param {ModelConfig} config - 模型配置
    */
   constructor(config: ModelConfig) {
-    this.modelConfig = config;
+    super(config);
   }
   
   /**
@@ -58,45 +55,5 @@ export class AnthropicProvider implements IModelProvider {
       { id: 'claude-3-haiku-20240307', name: 'Claude 3 Haiku' },
       { id: 'claude-2.1', name: 'Claude 2.1' }
     ];
-  }
-  
-  /**
-   * 测试连接
-   * @returns {Promise<void>}
-   */
-  async testConnection(): Promise<void> {
-    const testMessages: Message[] = [
-      { role: 'user', content: '请回答ok' }
-    ];
-    
-    await this.sendMessage(testMessages);
-  }
-
-  /**
-   * 发送消息并返回包含思考过程的响应
-   * @param {Message[]} messages - 消息列表
-   * @returns {Promise<ThinkingResponse>} 包含思考过程的响应
-   */
-  async sendMessageWithThinking(messages: Message[]): Promise<ThinkingResponse> {
-    try {
-      // Anthropic模型不直接支持思考过程提取，可以通过提示词方式尝试
-      // 使用通用思考提取器尝试解析结果中的思考过程
-      const thoughtExtractor = new DeepSeekThoughtExtractor();
-      const content = await this.sendMessage(messages);
-      const result = thoughtExtractor.extract(content);
-      
-      return {
-        thinking: result.thinking,
-        content: result.answer || content
-      };
-    } catch (error) {
-      console.error('获取思考过程失败:', error);
-      // 错误情况下返回普通响应
-      const content = await this.sendMessage(messages);
-      return {
-        thinking: null,
-        content
-      };
-    }
   }
 } 

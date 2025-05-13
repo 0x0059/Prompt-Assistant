@@ -1,24 +1,22 @@
 import { GoogleGenerativeAI, GenerativeModel } from '@google/generative-ai';
 import { ModelConfig } from '../../model/types';
 import { Message, StreamHandlers, ModelInfo, ThinkingResponse } from '../types';
-import { IModelProvider } from './interface';
+import { BaseModelProvider } from './baseProvider';
 import { isVercel, getProxyUrl } from '../../../utils/environment';
-import { DeepSeekThoughtExtractor } from '../../../utils/deepseekThoughtExtractor';
+import { ThoughtExtractor } from '../extractors/base/thoughtExtractor';
 
 /**
  * Gemini模型提供商
  * @class GeminiProvider
- * @implements {IModelProvider}
+ * @extends {BaseModelProvider}
  */
-export class GeminiProvider implements IModelProvider {
-  private modelConfig: ModelConfig;
-  
+export class GeminiProvider extends BaseModelProvider {
   /**
    * 创建Gemini提供商实例
    * @param {ModelConfig} config - 模型配置
    */
   constructor(config: ModelConfig) {
-    this.modelConfig = config;
+    super(config);
   }
   
   /**
@@ -200,31 +198,10 @@ export class GeminiProvider implements IModelProvider {
     // Gemini API没有直接获取模型列表的接口，返回预定义列表
     return [
       { id: 'gemini-1.0-pro', name: 'Gemini 1.0 Pro' },
-      { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash' },
+      { id: 'gemini-1.0-pro-vision', name: 'Gemini 1.0 Pro Vision' },
       { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro' },
-      { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash' }
+      { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash' }
     ];
-  }
-  
-  /**
-   * 测试连接
-   * @returns {Promise<void>}
-   */
-  async testConnection(): Promise<void> {
-    const testMessages: Message[] = [
-      { role: 'user', content: '请回答ok' }
-    ];
-    
-    await this.sendMessage(testMessages);
-  }
-  
-  /**
-   * 小延迟，让UI有时间更新
-   * @private
-   * @returns {Promise<void>}
-   */
-  private async smallDelay(): Promise<void> {
-    await new Promise(resolve => setTimeout(resolve, 10));
   }
   
   /**
@@ -246,23 +223,14 @@ export class GeminiProvider implements IModelProvider {
         };
       }
       
-      // 获取响应并使用提取器
+      // 获取响应并使用基类提取器
       const content = await this.sendMessage(messagesWithPrompt);
-      const thoughtExtractor = new DeepSeekThoughtExtractor();
-      const result = thoughtExtractor.extract(content);
-      
       return {
-        thinking: result.thinking,
-        content: result.answer || content
+        thinking: this.thoughtExtractor.extract(content).thinking,
+        content: this.thoughtExtractor.extract(content).answer || content
       };
     } catch (error) {
-      console.error('获取思考过程失败:', error);
-      // 错误情况下返回普通响应
-      const content = await this.sendMessage(messages);
-      return {
-        thinking: null,
-        content
-      };
+      return super.sendMessageWithThinking(messages); // 失败时使用基类方法
     }
   }
 } 
