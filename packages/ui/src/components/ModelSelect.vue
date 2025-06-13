@@ -142,7 +142,8 @@ watch(
 
 // 计算下拉框样式
 const dropdownStyle = computed(() => ({
-  minWidth: '100%'
+  minWidth: '100%',
+  marginTop: '-9.75rem'
 }))
 </script>
 

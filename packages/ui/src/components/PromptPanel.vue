@@ -39,16 +39,76 @@
       </div>
     </div>
     
-    <!-- 内容区域 -->
+    <!-- 对话框内容区域 -->
     <div class="flex-1 min-h-0 p-[2px] overflow-hidden">
       <div class="h-full relative">
-        <textarea
-          ref="promptTextarea"
-          :value="optimizedPrompt"
-          @input="handleInput"
-          class="w-full h-full px-4 py-3 theme-input resize-none"
-          :placeholder="t('prompt.optimizedPlaceholder')"
-        ></textarea>
+        <!-- 对话气泡容器 -->
+        <div class="h-full flex flex-col space-y-4 p-4 overflow-y-auto prompt-body">
+          <!-- 用户问题气泡 -->
+          <div v-if="userQuestion" class="flex justify-end">
+            <div class="max-w-[80%] theme-chat-bubble-user rounded-2xl px-4 py-3 relative group">
+              <button
+                @click="copyText(userQuestion)"
+                class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity theme-copy-button"
+                title="复制问题"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
+                  <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
+                </svg>
+              </button>
+              <div class="text-sm theme-text markdown-content" v-html="parseMarkdown(userQuestion)"></div>
+            </div>
+          </div>
+          
+          <!-- AI回答气泡 -->
+          <div v-if="optimizedPrompt" class="flex justify-start">
+            <div class="max-w-[80%] theme-chat-bubble-ai rounded-2xl px-4 py-3 relative group">
+              <button
+                @click="copyText(optimizedPrompt)"
+                class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity theme-copy-button"
+                title="复制回答"
+              >
+                <!-- <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
+                  <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
+                </svg> -->
+              </button>
+              <div class="text-sm theme-text markdown-content" v-html="parseMarkdown(optimizedPrompt)"></div>
+            </div>
+          </div>
+          
+          <!-- AI思考中气泡 -->
+          <div v-if="isIterating" class="flex justify-start">
+            <div class="max-w-[80%] theme-chat-bubble-ai rounded-2xl px-4 py-3">
+              <div class="flex items-center space-x-2">
+                <div class="animate-pulse">
+                  <div class="w-2 h-2 bg-current rounded-full"></div>
+                </div>
+                <div class="animate-pulse">
+                  <div class="w-2 h-2 bg-current rounded-full"></div>
+                </div>
+                <div class="animate-pulse">
+                  <div class="w-2 h-2 bg-current rounded-full"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 输入区域 -->
+        <!-- <div class="absolute bottom-0 left-0 right-0 p-4">
+          <div class="relative">
+            <textarea
+              ref="promptTextarea"
+              :value="userQuestion"
+              @input="handleInput"
+              class="w-full theme-chat-input rounded-2xl px-4 py-3 resize-none"
+              :placeholder="t('prompt.optimizedPlaceholder')"
+              rows="3"
+            ></textarea>
+          </div>
+        </div> -->
       </div>
     </div>
 
@@ -154,6 +214,9 @@ const props = defineProps({
   }
 })
 
+// 用户问题
+const userQuestion = ref('')
+
 // 监听optimizedPrompt变化，自动滚动到底部
 watchSource(() => props.optimizedPrompt, true)
 
@@ -182,6 +245,7 @@ const templateSelectText = computed(() => {
 // 处理输入变化
 const handleInput = (event: Event) => {
   const target = event.target as HTMLTextAreaElement
+  userQuestion.value = target.value
   emit('update:optimizedPrompt', target.value)
 }
 
@@ -232,16 +296,224 @@ const switchVersion = (version: PromptRecord) => {
     forceScrollToBottom()
   })
 }
+
+// 简单的 Markdown 解析函数
+const parseMarkdown = (text: string) => {
+  if (!text) return ''
+  
+  // 处理标题
+  text = text.replace(/^### (.*$)/gm, '<h3>$1</h3>')
+  text = text.replace(/^## (.*$)/gm, '<h2>$1</h2>')
+  text = text.replace(/^# (.*$)/gm, '<h1>$1</h1>')
+  
+  // 处理加粗和斜体
+  text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+  text = text.replace(/\*(.*?)\*/g, '<em>$1</em>')
+  
+  // 处理代码块
+  text = text.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
+  text = text.replace(/`(.*?)`/g, '<code>$1</code>')
+  
+  // 处理列表
+  text = text.replace(/^\s*[-*+]\s+(.*$)/gm, '<li>$1</li>')
+  text = text.replace(/(<li>.*<\/li>)/gs, '<ul>$1</ul>')
+  
+  // 处理引用
+  text = text.replace(/^> (.*$)/gm, '<blockquote>$1</blockquote>')
+  
+  // 处理链接
+  text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>')
+  
+  // 处理换行
+  text = text.replace(/\n/g, '<br>')
+  
+  return text
+}
 </script>
 
 <style scoped>
+.prompt-body {
+  height: calc(100vh - 29.45rem);
+  overflow: auto;
+}
+/* 基础样式 */
 textarea {
-  /* 隐藏滚动条但保持可滚动 */
-  scrollbar-width: none; /* Firefox */
-  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 
 textarea::-webkit-scrollbar {
-  display: none; /* Chrome, Safari and Opera */
+  display: none;
+}
+
+/* 对话气泡样式 */
+.theme-chat-bubble-user {
+  background-color: rgb(139, 92, 246);
+  color: white;
+  position: relative;
+}
+
+.theme-chat-bubble-user::after {
+  content: '';
+  position: absolute;
+  right: -8px;
+  top: 50%;
+  transform: translateY(-50%);
+  border-left: 8px solid rgb(139, 92, 246);
+  border-top: 8px solid transparent;
+  border-bottom: 8px solid transparent;
+}
+
+.theme-chat-bubble-ai {
+  background-color: rgba(139, 92, 246, 0.1);
+  color: rgb(139, 92, 246);
+  position: relative;
+}
+
+.theme-chat-bubble-ai::after {
+  content: '';
+  position: absolute;
+  left: -8px;
+  top: 15px;
+  border-right: 8px solid rgba(139, 92, 246, 0.1);
+  border-top: 8px solid transparent;
+  border-bottom: 8px solid transparent;
+}
+
+/* 复制按钮样式 */
+.theme-copy-button {
+  background-color: rgba(255, 255, 255, 0.1);
+  border-radius: 50%;
+  padding: 4px;
+  color: currentColor;
+  transition: all 0.2s ease;
+  z-index: 10;
+}
+
+.theme-copy-button:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+  transform: scale(1.1);
+}
+
+/* 输入框样式 */
+.theme-chat-input {
+  background-color: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(139, 92, 246, 0.2);
+  color: inherit;
+  transition: all 0.3s ease;
+}
+
+.theme-chat-input:focus {
+  border-color: rgb(139, 92, 246);
+  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2);
+  outline: none;
+}
+
+/* 动画效果 */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.animate-pulse {
+  animation: pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Markdown 样式 */
+.markdown-content {
+  line-height: 1.6;
+}
+
+.markdown-content :deep(h1) {
+  font-size: 1.5em;
+  margin: 0.5em 0;
+  font-weight: 600;
+}
+
+.markdown-content :deep(h2) {
+  font-size: 1.3em;
+  margin: 0.5em 0;
+  font-weight: 600;
+}
+
+.markdown-content :deep(h3) {
+  font-size: 1.1em;
+  margin: 0.5em 0;
+  font-weight: 600;
+}
+
+.markdown-content :deep(p) {
+  margin: 0.5em 0;
+}
+
+.markdown-content :deep(ul) {
+  margin: 0.5em 0;
+  padding-left: 1.5em;
+  list-style-type: disc;
+}
+
+.markdown-content :deep(li) {
+  margin: 0.25em 0;
+}
+
+.markdown-content :deep(code) {
+  background-color: rgba(139, 92, 246, 0.1);
+  padding: 0.2em 0.4em;
+  border-radius: 3px;
+  font-family: monospace;
+  font-size: 0.9em;
+}
+
+.markdown-content :deep(pre) {
+  background-color: rgba(139, 92, 246, 0.1);
+  padding: 1em;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 0.5em 0;
+}
+
+.markdown-content :deep(pre code) {
+  background-color: transparent;
+  padding: 0;
+  border-radius: 0;
+}
+
+.markdown-content :deep(blockquote) {
+  border-left: 4px solid rgba(139, 92, 246, 0.5);
+  margin: 0.5em 0;
+  padding: 0.5em 1em;
+  background-color: rgba(139, 92, 246, 0.1);
+}
+
+.markdown-content :deep(a) {
+  color: rgb(139, 92, 246);
+  text-decoration: underline;
+}
+
+.markdown-content :deep(strong) {
+  font-weight: 600;
+}
+
+.markdown-content :deep(em) {
+  font-style: italic;
+}
+
+/* 代码块滚动条样式 */
+.markdown-content :deep(pre)::-webkit-scrollbar {
+  height: 6px;
+}
+
+.markdown-content :deep(pre)::-webkit-scrollbar-track {
+  background: rgba(139, 92, 246, 0.1);
+  border-radius: 3px;
+}
+
+.markdown-content :deep(pre)::-webkit-scrollbar-thumb {
+  background: rgba(139, 92, 246, 0.3);
+  border-radius: 3px;
+}
+
+.markdown-content :deep(pre)::-webkit-scrollbar-thumb:hover {
+  background: rgba(139, 92, 246, 0.4);
 }
 </style>
