@@ -21,7 +21,7 @@
         </div>
       </div>
       <div class="flex items-center space-x-4">
-        <button
+        <!-- <button
           v-if="optimizedPrompt"
           @click="handleIterate"
           class="px-3 py-1.5 theme-button-secondary flex items-center space-x-2"
@@ -35,7 +35,7 @@
           class="px-3 py-1.5 theme-button-secondary flex items-center space-x-2"
         >
           <span>{{ t('prompt.copy') }}</span>
-        </button>
+        </button> -->
       </div>
     </div>
     
@@ -43,7 +43,7 @@
     <div class="flex-1 min-h-0 p-[2px] overflow-hidden">
       <div class="h-full relative">
         <!-- 对话气泡容器 -->
-        <div class="h-full flex flex-col space-y-4 p-4 overflow-y-auto prompt-body">
+        <div ref="chatContainer" class="h-full flex flex-col space-y-4 p-4 overflow-y-auto prompt-body">
           <!-- 用户问题气泡 -->
           <div v-if="userQuestion" class="flex justify-end">
             <div class="max-w-[80%] theme-chat-bubble-user rounded-2xl px-4 py-3 relative group">
@@ -64,17 +64,27 @@
           <!-- AI回答气泡 -->
           <div v-if="optimizedPrompt" class="flex justify-start">
             <div class="max-w-[80%] theme-chat-bubble-ai rounded-2xl px-4 py-3 relative group">
-              <button
-                @click="copyText(optimizedPrompt)"
-                class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity theme-copy-button"
-                title="复制回答"
-              >
-                <!-- <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
-                  <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
-                </svg> -->
-              </button>
               <div class="text-sm theme-text markdown-content" v-html="parseMarkdown(optimizedPrompt)"></div>
+              <div class="flex items-center justify-end gap-2 mt-3 pt-2 border-t border-current/10">
+                <button
+                  @click="handleIterate"
+                  class="px-2 py-1 text-xs rounded transition-colors theme-button-secondary flex items-center space-x-1"
+                  :disabled="isIterating"
+                >
+                  <span>{{ isIterating ? t('prompt.optimizing') : t('prompt.continueOptimize') }}</span>
+                </button>
+                <button
+                  @click="copyText(optimizedPrompt)"
+                  class="px-2 py-1 text-xs rounded transition-colors theme-button-secondary flex items-center space-x-1"
+                  title="复制回答"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
+                    <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
+                  </svg>
+                  <span>{{ t('prompt.copy') }}</span>
+                </button>
+              </div>
             </div>
           </div>
           
@@ -164,7 +174,7 @@
 
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
-import { ref, defineProps, defineEmits, computed, nextTick } from 'vue'
+import { ref, defineProps, defineEmits, computed, nextTick, watch, onMounted } from 'vue'
 import { useToast } from '../composables/useToast'
 import { useAutoScroll } from '../composables/useAutoScroll'
 import { useClipboard } from '../composables/useClipboard'
@@ -181,9 +191,10 @@ const toast = useToast()
 const { copyText } = useClipboard()
 
 // 使用自动滚动组合式函数
-const { elementRef: promptTextarea, watchSource, forceScrollToBottom, shouldAutoScroll } = useAutoScroll<HTMLTextAreaElement>({
+const { elementRef: chatContainer, watchSource, forceScrollToBottom } = useAutoScroll<HTMLDivElement>({
   debug: import.meta.env.DEV,
-  threshold: 10 // 设置更大的阈值以提高用户体验
+  threshold: 10,
+  enabled: true // 确保自动滚动始终启用
 })
 
 interface IteratePayload {
@@ -211,14 +222,59 @@ const props = defineProps({
   currentVersionId: {
     type: String,
     default: ''
+  },
+  userQuestion: {
+    type: String,
+    default: ''
   }
 })
 
-// 用户问题
-const userQuestion = ref('')
+// 监听optimizedPrompt变化，强制滚动到底部
+watch(() => props.optimizedPrompt, () => {
+  nextTick(() => {
+    forceScrollToBottom()
+  })
+}, { immediate: true })
 
-// 监听optimizedPrompt变化，自动滚动到底部
-watchSource(() => props.optimizedPrompt, true)
+// 监听isIterating状态变化
+watch(() => props.isIterating, (newVal) => {
+  if (newVal) {
+    nextTick(() => {
+      forceScrollToBottom()
+    })
+  }
+})
+
+// 监听userQuestion变化
+watch(() => props.userQuestion, () => {
+  nextTick(() => {
+    forceScrollToBottom()
+  })
+})
+
+// 组件挂载后确保滚动到底部
+onMounted(() => {
+  nextTick(() => {
+    forceScrollToBottom()
+  })
+})
+
+// 添加MutationObserver监听内容变化
+onMounted(() => {
+  if (chatContainer.value) {
+    const observer = new MutationObserver(() => {
+      nextTick(() => {
+        forceScrollToBottom()
+      })
+    })
+    
+    observer.observe(chatContainer.value, {
+      childList: true,
+      subtree: true,
+      characterData: true
+    })
+  }
+})
 
 const emit = defineEmits<{
   'update:optimizedPrompt': [value: string];
@@ -245,7 +301,6 @@ const templateSelectText = computed(() => {
 // 处理输入变化
 const handleInput = (event: Event) => {
   const target = event.target as HTMLTextAreaElement
-  userQuestion.value = target.value
   emit('update:optimizedPrompt', target.value)
 }
 
@@ -334,8 +389,30 @@ const parseMarkdown = (text: string) => {
 <style scoped>
 .prompt-body {
   height: calc(100vh - 29.45rem);
-  overflow: auto;
+  overflow-y: auto;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch; /* 增加iOS滚动支持 */
 }
+
+/* 自定义滚动条样式 */
+.prompt-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.prompt-body::-webkit-scrollbar-track {
+  background: rgba(139, 92, 246, 0.1);
+  border-radius: 3px;
+}
+
+.prompt-body::-webkit-scrollbar-thumb {
+  background: rgba(139, 92, 246, 0.3);
+  border-radius: 3px;
+}
+
+.prompt-body::-webkit-scrollbar-thumb:hover {
+  background: rgba(139, 92, 246, 0.4);
+}
+
 /* 基础样式 */
 textarea {
   scrollbar-width: none;
@@ -515,5 +592,21 @@ textarea::-webkit-scrollbar {
 
 .markdown-content :deep(pre)::-webkit-scrollbar-thumb:hover {
   background: rgba(139, 92, 246, 0.4);
+}
+
+/* 气泡框底部按钮样式 */
+.theme-button-secondary {
+  background-color: rgba(139, 92, 246, 0.1);
+  color: currentColor;
+  transition: all 0.2s ease;
+}
+
+.theme-button-secondary:hover {
+  background-color: rgba(139, 92, 246, 0.2);
+}
+
+.theme-button-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 </style>
