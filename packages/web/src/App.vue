@@ -43,6 +43,7 @@
             @switchVersion="handleSwitchVersion"
           />
         </div>
+        
         <!-- 输入区域 -->
         <div class="flex-none">
           <InputPanelUI
