@@ -121,12 +121,14 @@ const updateDropdownPosition = () => {
   if (rightSpace < 300) {
     dropdownStyle.value = {
       right: '0',
-      left: 'auto'
+      left: 'auto',
+      marginTop: '-22.45rem'
     }
   } else {
     dropdownStyle.value = {
       left: '0',
-      right: 'auto'
+      right: 'auto',
+      marginTop: '-22.45rem'
     }
   }
 }

@@ -30,6 +30,20 @@
     <template #prompt-panel>
       <!-- 提示词区 -->
       <ContentCardUI>
+        <!-- 优化结果区域 -->
+        <div class="flex-1 min-h-0 overflow-y-auto">
+          <PromptPanelUI 
+            v-model:optimized-prompt="optimizedPrompt"
+            :is-iterating="isIterating"
+            v-model:selected-iterate-template="selectedIterateTemplate"
+            :versions="currentVersions"
+            :current-version-id="currentVersionId"
+            @iterate="handleIteratePrompt"
+            @openTemplateManager="openTemplateManager"
+            @switchVersion="handleSwitchVersion"
+          />
+        </div>
+        
         <!-- 输入区域 -->
         <div class="flex-none">
           <InputPanelUI
@@ -66,19 +80,7 @@
           </InputPanelUI>
         </div>
 
-        <!-- 优化结果区域 -->
-        <div class="flex-1 min-h-0 overflow-y-auto">
-          <PromptPanelUI 
-            v-model:optimized-prompt="optimizedPrompt"
-            :is-iterating="isIterating"
-            v-model:selected-iterate-template="selectedIterateTemplate"
-            :versions="currentVersions"
-            :current-version-id="currentVersionId"
-            @iterate="handleIteratePrompt"
-            @openTemplateManager="openTemplateManager"
-            @switchVersion="handleSwitchVersion"
-          />
-        </div>
+        
       </ContentCardUI>
     </template>
 
