@@ -65,7 +65,7 @@
           <div v-if="optimizedPrompt" class="flex justify-start">
             <div class="max-w-[80%] theme-chat-bubble-ai rounded-2xl px-4 py-3 relative group">
               <div class="text-sm theme-text markdown-content" v-html="parseMarkdown(optimizedPrompt)"></div>
-              <div class="flex items-center justify-end gap-2 mt-3 pt-2 border-t border-current/10">
+              <div v-if="!loading" class="flex items-center justify-end gap-2 mt-3 pt-2 border-t border-current/10">
                 <button
                   @click="handleIterate"
                   class="px-2 py-1 text-xs rounded transition-colors theme-button-secondary flex items-center space-x-1"
@@ -89,7 +89,7 @@
           </div>
           
           <!-- AI思考中气泡 -->
-          <div v-if="isIterating" class="flex justify-start">
+          <!-- <div v-if="isIterating" class="flex justify-start">
             <div class="max-w-[80%] theme-chat-bubble-ai rounded-2xl px-4 py-3">
               <div class="flex items-center space-x-2">
                 <div class="animate-pulse">
@@ -103,7 +103,7 @@
                 </div>
               </div>
             </div>
-          </div>
+          </div> -->
         </div>
 
         <!-- 输入区域 -->
@@ -226,6 +226,10 @@ const props = defineProps({
   userQuestion: {
     type: String,
     default: ''
+  },
+  loading: {
+    type: Boolean,
+    default: false
   }
 })
 
@@ -380,7 +384,7 @@ const parseMarkdown = (text: string) => {
   text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>')
   
   // 处理换行
-  text = text.replace(/\n/g, '<br>')
+  // text = text.replace(/\n/g, '<br>')
   
   return text
 }

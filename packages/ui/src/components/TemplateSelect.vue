@@ -128,7 +128,7 @@ const updateDropdownPosition = () => {
     dropdownStyle.value = {
       left: '0',
       right: 'auto',
-      marginTop: '-22.45rem'
+      marginTop: props.type === 'optimize' ? '-22.45rem' : '.25rem',
     }
   }
 }

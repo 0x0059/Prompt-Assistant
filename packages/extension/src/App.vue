@@ -76,6 +76,7 @@
           @iterate="handleIteratePrompt"
           @openTemplateManager="openTemplateManager"
           @switchVersion="handleSwitchVersion"
+          :loading="isOptimizing"
         />
       </div>
     </ContentCardUI>
