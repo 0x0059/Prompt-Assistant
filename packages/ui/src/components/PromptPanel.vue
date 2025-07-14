@@ -44,66 +44,42 @@
       <div class="h-full relative">
         <!-- 对话气泡容器 -->
         <div ref="chatContainer" class="h-full flex flex-col space-y-4 p-4 overflow-y-auto prompt-body">
-          <!-- 用户问题气泡 -->
-          <div v-if="userQuestion" class="flex justify-end">
-            <div class="max-w-[80%] theme-chat-bubble-user rounded-2xl px-4 py-3 relative group">
-              <button
-                @click="copyText(userQuestion)"
-                class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity theme-copy-button"
-                title="复制问题"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
-                  <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
-                </svg>
-              </button>
-              <div class="text-sm theme-text markdown-content" v-html="parseMarkdown(userQuestion)"></div>
-            </div>
-          </div>
-          
-          <!-- AI回答气泡 -->
-          <div v-if="optimizedPrompt" class="flex justify-start">
-            <div class="max-w-[80%] theme-chat-bubble-ai rounded-2xl px-4 py-3 relative group">
-              <div class="text-sm theme-text markdown-content" v-html="parseMarkdown(optimizedPrompt)"></div>
-              <div v-if="!loading" class="flex items-center justify-end gap-2 mt-3 pt-2 border-t border-current/10">
-                <button
-                  @click="handleIterate"
-                  class="px-2 py-1 text-xs rounded transition-colors theme-button-secondary flex items-center space-x-1"
-                  :disabled="isIterating"
-                >
-                  <span>{{ isIterating ? t('prompt.optimizing') : t('prompt.continueOptimize') }}</span>
-                </button>
-                <button
-                  @click="copyText(optimizedPrompt)"
-                  class="px-2 py-1 text-xs rounded transition-colors theme-button-secondary flex items-center space-x-1"
-                  title="复制回答"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
-                    <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
-                  </svg>
-                  <span>{{ t('prompt.copy') }}</span>
-                </button>
+          <!-- 多轮对话历史气泡 -->
+          <template v-for="(item, idx) in promptHistory" :key="idx">
+            <!-- 原始提示词气泡（右侧） -->
+            <div class="flex justify-end">
+              <div class="max-w-[80%] theme-chat-bubble-user rounded-2xl px-4 py-3 relative group">
+                <div class="text-sm theme-text markdown-content" v-html="parseMarkdown(item.original)"></div>
               </div>
             </div>
-          </div>
-          
-          <!-- AI思考中气泡 -->
-          <!-- <div v-if="isIterating" class="flex justify-start">
-            <div class="max-w-[80%] theme-chat-bubble-ai rounded-2xl px-4 py-3">
-              <div class="flex items-center space-x-2">
-                <div class="animate-pulse">
-                  <div class="w-2 h-2 bg-current rounded-full"></div>
-                </div>
-                <div class="animate-pulse">
-                  <div class="w-2 h-2 bg-current rounded-full"></div>
-                </div>
-                <div class="animate-pulse">
-                  <div class="w-2 h-2 bg-current rounded-full"></div>
+            <!-- 优化后AI气泡（左侧） -->
+            <div class="flex justify-start">
+              <div class="max-w-[80%] theme-chat-bubble-ai rounded-2xl px-4 py-3 relative group">
+                <div class="text-sm theme-text markdown-content" v-html="parseMarkdown(item.optimized)"></div>
+                <!-- 仅最后一条优化气泡显示操作按钮 -->
+                <div v-if="!loading && idx === promptHistory.length - 1" class="flex items-center justify-end gap-2 mt-3 pt-2 border-t border-current/10">
+                  <button
+                    @click="handleIterate"
+                    class="px-2 py-1 text-xs rounded transition-colors theme-button-secondary flex items-center space-x-1"
+                    :disabled="isIterating"
+                  >
+                    <span>{{ isIterating ? t('prompt.optimizing') : t('prompt.continueOptimize') }}</span>
+                  </button>
+                  <button
+                    @click="copyText(item.optimized)"
+                    class="px-2 py-1 text-xs rounded transition-colors theme-button-secondary flex items-center space-x-1"
+                    title="复制回答"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
+                      <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
+                    </svg>
+                    <span>{{ t('prompt.copy') }}</span>
+                  </button>
                 </div>
               </div>
             </div>
-          </div> -->
+          </template>
         </div>
 
         <!-- 输入区域 -->
@@ -230,6 +206,14 @@ const props = defineProps({
   loading: {
     type: Boolean,
     default: false
+  },
+  originalPrompt: {
+    type: String,
+    default: ''
+  },
+  promptHistory: {
+    type: Array as () => Array<{ original: string, optimized: string }>,
+    default: () => []
   }
 })
 
