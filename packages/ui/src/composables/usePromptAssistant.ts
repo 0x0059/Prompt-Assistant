@@ -52,6 +52,7 @@ export function usePromptAssistant(
   // 状态
   const prompt = ref('')
   const optimizedPrompt = ref('')
+  const talkContent = ref<{ role: 'user' | 'ai', content: string }[]>([])
   const isOptimizing = ref(false)
   const isIterating = ref(false)
   const selectedOptimizeTemplate = ref<Template | null>(null)
@@ -88,7 +89,7 @@ export function usePromptAssistant(
     
     isOptimizing.value = true
     optimizedPrompt.value = ''  // Clear previous result
-    
+    talkContent.value.push({ role: 'user', content: prompt.value }, { role: 'ai', content: '' })
     try {
       // Use streaming call
       await promptService.value.optimizePromptStream(
@@ -97,7 +98,9 @@ export function usePromptAssistant(
         selectedOptimizeTemplate.value.content,
         {
           onToken: (token: string) => {
+            console.log('token', token)
             optimizedPrompt.value += token
+            talkContent.value[talkContent.value.length - 1].content += token
           },
           onComplete: () => {
             if (!selectedOptimizeTemplate.value) return
@@ -160,7 +163,7 @@ export function usePromptAssistant(
 
     isIterating.value = true
     optimizedPrompt.value = ''  // Clear previous result
-    
+    talkContent.value.push({ role: 'user', content: iterateInput }, { role: 'ai', content: '' })
     try {
       await promptService.value.iteratePromptStream(
         originalPrompt,
@@ -169,6 +172,7 @@ export function usePromptAssistant(
         {
           onToken: (token: string) => {
             optimizedPrompt.value += token
+            talkContent.value[talkContent.value.length - 1].content += token
           },
           onComplete: () => {
             if (!selectedIterateTemplate.value) return
@@ -304,7 +308,7 @@ export function usePromptAssistant(
     currentChainId,
     currentVersions,
     currentVersionId,
-    
+    talkContent,
     // 方法
     handleOptimizePrompt,
     handleIteratePrompt,

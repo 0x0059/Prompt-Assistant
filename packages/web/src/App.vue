@@ -33,6 +33,7 @@
         <!-- 优化结果区域 -->
         <div class="flex-1 min-h-0 overflow-y-auto">
           <PromptPanelUI 
+            :talk-content="talkContent"
             v-model:optimized-prompt="optimizedPrompt"
             :is-iterating="isIterating"
             v-model:selected-iterate-template="selectedIterateTemplate"
@@ -132,7 +133,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
 import {
   // UI组件
   ToastUI,
@@ -184,6 +185,7 @@ onMounted(() => {
 
 // 初始化 toast
 const toast = useToast()
+const messages = ref<{ role: 'user' | 'ai', content: string }[]>([])
 
 // 初始化服务
 const {
@@ -221,6 +223,7 @@ const {
   currentVersions,
   currentVersionId,
   currentChainId,
+  talkContent,
   handleOptimizePrompt,
   handleIteratePrompt,
   handleSwitchVersion,

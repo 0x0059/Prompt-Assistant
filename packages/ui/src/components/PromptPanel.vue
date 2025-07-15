@@ -43,47 +43,45 @@
     <div class="flex-1 min-h-0 p-[2px] overflow-hidden">
       <div class="h-full relative">
         <!-- 对话气泡容器 -->
-        <div ref="chatContainer" class="h-full flex flex-col space-y-4 p-4 overflow-y-auto prompt-body">
-          <!-- 用户问题气泡 -->
-          <div v-if="userQuestion" class="flex justify-end">
-            <div class="max-w-[80%] theme-chat-bubble-user rounded-2xl px-4 py-3 relative group">
-              <button
-                @click="copyText(userQuestion)"
-                class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity theme-copy-button"
-                title="复制问题"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
-                  <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
-                </svg>
-              </button>
-              <div class="text-sm theme-text markdown-content" v-html="parseMarkdown(userQuestion)"></div>
+        <div
+          ref="chatContainer"
+          class="h-full flex flex-col space-y-4 p-4 overflow-y-auto prompt-body"
+        >
+          <div
+            v-for="(content, index) in talkContent"
+            :key="index"
+          >
+            <!-- 用户问题气泡 -->
+            <div v-if="content.role === 'user'" class="flex justify-end">
+              <div class="max-w-[80%] theme-chat-bubble-ai rounded-2xl px-4 py-3 relative group">
+                <div class="text-sm theme-text markdown-content" v-html="parseMarkdown(content.content)"></div>
+              </div>
             </div>
-          </div>
-          
-          <!-- AI回答气泡 -->
-          <div v-if="optimizedPrompt" class="flex justify-start">
-            <div class="max-w-[80%] theme-chat-bubble-ai rounded-2xl px-4 py-3 relative group">
-              <div class="text-sm theme-text markdown-content" v-html="parseMarkdown(optimizedPrompt)"></div>
-              <div v-if="!loading" class="flex items-center justify-end gap-2 mt-3 pt-2 border-t border-current/10">
-                <button
-                  @click="handleIterate"
-                  class="px-2 py-1 text-xs rounded transition-colors theme-button-secondary flex items-center space-x-1"
-                  :disabled="isIterating"
-                >
-                  <span>{{ isIterating ? t('prompt.optimizing') : t('prompt.continueOptimize') }}</span>
-                </button>
-                <button
-                  @click="copyText(optimizedPrompt)"
-                  class="px-2 py-1 text-xs rounded transition-colors theme-button-secondary flex items-center space-x-1"
-                  title="复制回答"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
-                    <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
-                  </svg>
-                  <span>{{ t('prompt.copy') }}</span>
-                </button>
+            
+            <!-- AI回答气泡 -->
+            <div v-if="content.role === 'ai'" class="flex justify-start">
+              <div class="max-w-[80%] theme-chat-bubble-ai rounded-2xl px-4 py-3 relative group">
+                <div class="text-sm theme-text markdown-content" v-html="parseMarkdown(content.content)"></div>
+                <div v-if="!loading" class="flex items-center justify-end gap-2 mt-3 pt-2 border-t border-current/10">
+                  <button
+                    @click="handleIterate(index)"
+                    class="px-2 py-1 text-xs rounded transition-colors theme-button-secondary flex items-center space-x-1"
+                    :disabled="isIterating"
+                  >
+                    <span>{{ isIterating ? t('prompt.optimizing') : t('prompt.continueOptimize') }}</span>
+                  </button>
+                  <button
+                    @click="copyText(content.content)"
+                    class="px-2 py-1 text-xs rounded transition-colors theme-button-secondary flex items-center space-x-1"
+                    title="复制回答"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
+                      <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
+                    </svg>
+                    <span>{{ t('prompt.copy') }}</span>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -230,6 +228,10 @@ const props = defineProps({
   loading: {
     type: Boolean,
     default: false
+  },
+  talkContent: {
+    type: Array as () => { role: 'user' | 'ai', content: string }[],
+    default: () => []
   }
 })
 
@@ -291,6 +293,7 @@ const emit = defineEmits<{
 const showIterateInput = ref(false)
 const iterateInput = ref('')
 const templateType = ref<'optimize' | 'iterate'>('iterate')
+const selectedIterateIndex = ref(0);
 
 // 计算标题文本
 const templateTitleText = computed(() => {
@@ -315,12 +318,13 @@ const copyPrompt = async () => {
   copyText(props.optimizedPrompt)
 }
 
-const handleIterate = () => {
+const handleIterate = (index: number) => {
   if (!props.selectedIterateTemplate) {
     toast.error(t('prompt.error.noTemplate'))
     return
   }
-  showIterateInput.value = true
+  showIterateInput.value = true;
+  selectedIterateIndex.value = index;
 }
 
 const cancelIterate = () => {
@@ -336,7 +340,7 @@ const submitIterate = () => {
   }
   
   emit('iterate', {
-    originalPrompt: props.optimizedPrompt,
+    originalPrompt: props.talkContent[selectedIterateIndex.value].content,
     iterateInput: iterateInput.value.trim()
   })
   
@@ -449,16 +453,6 @@ textarea::-webkit-scrollbar {
   background-color: rgba(139, 92, 246, 0.1);
   color: rgb(139, 92, 246);
   position: relative;
-}
-
-.theme-chat-bubble-ai::after {
-  content: '';
-  position: absolute;
-  left: -8px;
-  top: 15px;
-  border-right: 8px solid rgba(139, 92, 246, 0.1);
-  border-top: 8px solid transparent;
-  border-bottom: 8px solid transparent;
 }
 
 /* 复制按钮样式 */
